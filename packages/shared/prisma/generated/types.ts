@@ -947,6 +947,19 @@ export type VerificationToken = {
   token: string;
   expires: Timestamp;
 };
+export type Workflow = {
+  id: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  project_id: string;
+  created_by: string;
+  name: string;
+  description: Generated<string>;
+  version: number;
+  tags: Generated<string[]>;
+  definition: unknown;
+  input_schema: unknown | null;
+};
 export type DB = {
   Account: Account;
   actions: Action;
@@ -1011,4 +1024,5 @@ export type DB = {
   triggers: Trigger;
   users: User;
   verification_tokens: VerificationToken;
+  workflows: Workflow;
 };
