@@ -19,6 +19,7 @@ import {
   ClipboardPen,
   Clock,
   Beaker,
+  GitBranch,
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { type Entitlement } from "@/src/features/entitlements/constants/entitlements";
@@ -135,6 +136,14 @@ export const ROUTES: Route[] = [
     title: "Playground",
     pathname: "/project/[projectId]/playground",
     icon: TerminalIcon,
+    productModule: "playground",
+    group: RouteGroup.PromptManagement,
+    section: RouteSection.Main,
+  },
+  {
+    title: "Workflows",
+    pathname: "/project/[projectId]/workflows",
+    icon: GitBranch,
     productModule: "playground",
     group: RouteGroup.PromptManagement,
     section: RouteSection.Main,
