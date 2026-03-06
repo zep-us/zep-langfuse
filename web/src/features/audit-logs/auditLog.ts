@@ -35,6 +35,7 @@ export type AuditableResource =
   | "llmApiKey"
   | "llmTool"
   | "llmSchema"
+  | "workflow"
   | "batchExport"
   | "stripeCheckoutSession"
   | "batchAction"
