@@ -309,6 +309,8 @@ const MemoizedEditor = memo(function MemoizedEditor(props: {
       editable={true}
       lineNumbers={false}
       placeholder={placeholder}
+      minHeight="150px"
+      maxHeight="500px"
     />
   );
 });
