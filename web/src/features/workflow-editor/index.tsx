@@ -271,6 +271,7 @@ function WorkflowEditorContent() {
         <NodeConfigPanel
           selectedNodeId={selectedNodeId}
           nodes={nodes}
+          edges={edges}
           onNodeUpdate={handleNodeUpdate}
           onClose={() => setSelectedNodeId(null)}
         />
