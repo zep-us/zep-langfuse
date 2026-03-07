@@ -1,7 +1,8 @@
 import { useCallback, useEffect } from "react";
 import { api } from "@/src/utils/api";
-import type { WorkflowNode, WorkflowEdge } from "../types";
-import type { UIModelParams } from "@langfuse/shared";
+import type { WorkflowNode, WorkflowEdge, WorkflowDefinition } from "../types";
+import type { UIModelParams, ChatMessage } from "@langfuse/shared";
+import { convertUIModelParamsToModelParams } from "../utils/modelParams";
 
 interface UseWorkflowPersistenceProps {
   projectId: string;
@@ -12,31 +13,6 @@ interface UseWorkflowPersistenceProps {
 
 const DRAFT_STORAGE_KEY = (projectId: string) =>
   `langfuse-workflow-draft-${projectId}`;
-
-// Helper to convert UIModelParams to plain ModelParams for server
-function convertUIModelParamsToModelParams(uiParams: UIModelParams) {
-  return {
-    provider:
-      typeof uiParams.provider === "object" && "value" in uiParams.provider
-        ? uiParams.provider.value
-        : uiParams.provider,
-    model:
-      typeof uiParams.model === "object" && "value" in uiParams.model
-        ? uiParams.model.value
-        : uiParams.model,
-    adapter:
-      typeof uiParams.adapter === "object" && "value" in uiParams.adapter
-        ? uiParams.adapter.value
-        : uiParams.adapter,
-    temperature: uiParams.temperature?.enabled
-      ? uiParams.temperature.value
-      : undefined,
-    max_tokens: uiParams.max_tokens?.enabled
-      ? uiParams.max_tokens.value
-      : undefined,
-    top_p: uiParams.top_p?.enabled ? uiParams.top_p.value : undefined,
-  };
-}
 
 export function useWorkflowPersistence({
   projectId,
@@ -71,20 +47,77 @@ export function useWorkflowPersistence({
       }
 
       // Convert UIModelParams to ModelParams for all agent nodes
+      // Also strip out extra ReactFlow properties that aren't in the schema
       const convertedNodes = nodes.map((node) => {
+        const baseNode = {
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: node.data,
+        };
+
         if (node.type === "agent" && node.data.modelParams) {
           return {
-            ...node,
+            ...baseNode,
             data: {
-              ...node.data,
+              ...baseNode.data,
               modelParams: convertUIModelParamsToModelParams(
                 node.data.modelParams as UIModelParams,
               ),
             },
           };
         }
-        return node;
+        return baseNode;
       });
+
+      // Strip out extra ReactFlow properties from edges
+      const convertedEdges = edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle ?? undefined,
+        targetHandle: edge.targetHandle ?? undefined,
+      }));
+
+      // Type assertion needed: ReactFlow Node types have extra display properties
+      // that are stripped above to match the simpler Zod schema. The schema validates
+      // the structure at runtime.
+      type SimplifiedNode = {
+        id: string;
+        type: "agent" | "input" | "output";
+        position: { x: number; y: number };
+        data: {
+          label: string;
+          promptId?: string;
+          promptVersion?: number;
+          messages?: ChatMessage[];
+          modelParams?: {
+            provider: string;
+            model: string;
+            adapter: string;
+            temperature?: number;
+            max_tokens?: number;
+            top_p?: number;
+            top_k?: number;
+            max_completion_tokens?: number;
+            maxReasoningTokens?: number;
+            providerOptions?: Record<string, unknown>;
+          };
+          tools?: any[];
+          structuredOutputSchema?: any;
+          inputMapping?: {
+            sourceField: string;
+            targetVariable: string;
+            mappingType: "field" | "full";
+          }[];
+          outputMapping?: {
+            sourceField: string;
+            targetVariable: string;
+            mappingType: "field" | "full";
+          }[];
+          retryConfig?: { maxRetries?: number; retryDelay?: number };
+        };
+      };
 
       await saveWorkflow.mutateAsync({
         projectId,
@@ -92,8 +125,8 @@ export function useWorkflowPersistence({
         description,
         tags,
         definition: {
-          nodes: convertedNodes as any,
-          edges: edges as any,
+          nodes: convertedNodes as SimplifiedNode[],
+          edges: convertedEdges,
         },
       });
     },
@@ -113,11 +146,8 @@ export function useWorkflowPersistence({
       });
 
       if (workflow && workflow.definition && onLoad) {
-        const definition = workflow.definition as any;
-        onLoad(
-          definition.nodes as WorkflowNode[],
-          definition.edges as WorkflowEdge[],
-        );
+        const definition = workflow.definition as unknown as WorkflowDefinition;
+        onLoad(definition.nodes, definition.edges);
       }
 
       return workflow;

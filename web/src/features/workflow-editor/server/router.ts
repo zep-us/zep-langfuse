@@ -8,6 +8,7 @@ import { throwIfNoProjectAccess } from "@/src/features/rbac/utils/checkProjectAc
 import { TRPCError } from "@trpc/server";
 import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { logger } from "@langfuse/shared/src/server";
+import type { ChatMessage } from "@langfuse/shared";
 import {
   CreateWorkflowInput,
   UpdateWorkflowInput,
@@ -429,37 +430,48 @@ export const workflowRouter = createTRPCRouter({
         }
 
         const hasToolResults = input.messages.some(
-          (msg: any) => msg.type === "tool-result",
+          (msg: ChatMessage) => msg.type === "tool-result",
         );
 
         if ((input.tools && input.tools.length > 0) || hasToolResults) {
-          const fixedMessages = input.messages.map((msg: any) => {
+          const fixedMessages = input.messages.map((msg: ChatMessage) => {
             if (
               msg.type === "tool-result" &&
               (!msg.toolCallId || msg.toolCallId === "")
             ) {
               const assistantMessages = input.messages
                 .filter(
-                  (m: any) => m.type === "assistant-tool-call" && m.toolCalls,
+                  (m: ChatMessage) =>
+                    m.type === "assistant-tool-call" && "toolCalls" in m,
                 )
                 .reverse();
 
               for (const prevMsg of assistantMessages) {
-                const matchingToolCall = (prevMsg as any).toolCalls.find(
-                  (tc: any) => tc.name === (msg as any)._originalRole,
-                );
-                if (matchingToolCall && matchingToolCall.id) {
-                  return {
-                    ...msg,
-                    toolCallId: matchingToolCall.id,
-                  };
+                if (
+                  prevMsg.type === "assistant-tool-call" &&
+                  "toolCalls" in prevMsg
+                ) {
+                  // _originalRole is a custom property that may be set on tool-result messages
+                  const originalRole =
+                    "_originalRole" in msg
+                      ? (msg as { _originalRole?: string })._originalRole
+                      : undefined;
+                  const matchingToolCall = prevMsg.toolCalls.find(
+                    (tc) => tc.name === originalRole,
+                  );
+                  if (matchingToolCall && matchingToolCall.id) {
+                    return {
+                      ...msg,
+                      toolCallId: matchingToolCall.id,
+                    };
+                  }
                 }
               }
             }
             return msg;
           });
 
-          const result = await (fetchLLMCompletion as any)({
+          const result = await fetchLLMCompletion({
             ...fetchLLMCompletionParams,
             messages: fixedMessages,
             streaming: false,

@@ -9,31 +9,7 @@ import { topologicalSort } from "../utils/graphValidation";
 import { useWorkflowExecutionContext } from "../context/WorkflowExecutionContext";
 import { api } from "@/src/utils/api";
 import type { UIModelParams } from "@langfuse/shared";
-
-// Helper to convert UIModelParams to plain ModelParams
-function convertUIModelParamsToModelParams(uiParams: UIModelParams) {
-  return {
-    provider:
-      typeof uiParams.provider === "object" && "value" in uiParams.provider
-        ? uiParams.provider.value
-        : uiParams.provider,
-    model:
-      typeof uiParams.model === "object" && "value" in uiParams.model
-        ? uiParams.model.value
-        : uiParams.model,
-    adapter:
-      typeof uiParams.adapter === "object" && "value" in uiParams.adapter
-        ? uiParams.adapter.value
-        : uiParams.adapter,
-    temperature: uiParams.temperature?.enabled
-      ? uiParams.temperature.value
-      : undefined,
-    max_tokens: uiParams.max_tokens?.enabled
-      ? uiParams.max_tokens.value
-      : undefined,
-    top_p: uiParams.top_p?.enabled ? uiParams.top_p.value : undefined,
-  };
-}
+import { convertUIModelParamsToModelParams } from "../utils/modelParams";
 
 /**
  * Hook for executing a workflow DAG
@@ -182,7 +158,11 @@ export function useWorkflowExecution(projectId: string) {
           const output =
             typeof result === "string"
               ? result
-              : result.content || JSON.stringify(result);
+              : "content" in result
+                ? typeof result.content === "string"
+                  ? result.content
+                  : JSON.stringify(result.content)
+                : JSON.stringify(result);
 
           return output;
         } catch (error) {

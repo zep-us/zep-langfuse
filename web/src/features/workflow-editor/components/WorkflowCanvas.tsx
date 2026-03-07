@@ -9,6 +9,8 @@ import {
   useEdgesState,
   type OnConnect,
   type NodeTypes,
+  type NodeChange,
+  type EdgeChange,
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -49,7 +51,7 @@ export function WorkflowCanvas({
 
   // Notify parent of changes
   const handleNodesChange = useCallback(
-    (changes: any) => {
+    (changes: NodeChange<WorkflowNode>[]) => {
       onNodesChangeInternal(changes);
       // Get the updated nodes directly after the state update
       if (onNodesChange) {
@@ -63,7 +65,7 @@ export function WorkflowCanvas({
   );
 
   const handleEdgesChange = useCallback(
-    (changes: any) => {
+    (changes: EdgeChange<WorkflowEdge>[]) => {
       onEdgesChangeInternal(changes);
       // Get the updated edges directly after the state update
       if (onEdgesChange) {

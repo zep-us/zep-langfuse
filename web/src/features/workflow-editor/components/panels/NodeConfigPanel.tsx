@@ -120,7 +120,19 @@ export function NodeConfigPanel({
   );
 
   const handleUpdateMessage = useCallback(
-    (type: any, id: string, key: string, value: any) => {
+    <
+      T extends ChatMessageWithId["type"],
+      Key extends keyof Omit<
+        Extract<ChatMessageWithId, { type: T }>,
+        "id" | "type"
+      >,
+      Value = Extract<ChatMessageWithId, { type: T }>[Key],
+    >(
+      type: T,
+      id: string,
+      key: Key,
+      value: Value,
+    ) => {
       if (!selectedNode) return;
       setMessages((prev) => {
         const updatedMessages = prev.map((m) => {
@@ -170,7 +182,7 @@ export function NodeConfigPanel({
       setMessages: handleSetMessages,
       addMessage: handleAddMessage,
       deleteMessage: handleDeleteMessage,
-      updateMessage: handleUpdateMessage as any, // Type cast to satisfy complex generic signature
+      updateMessage: handleUpdateMessage,
       replaceMessage: handleReplaceMessage,
     }),
     [
@@ -238,7 +250,7 @@ export function NodeConfigPanel({
     top_p: { value: 1, enabled: false },
     maxTemperature: { value: 2, enabled: true },
     maxReasoningTokens: { value: 0, enabled: false },
-    providerOptions: { value: {} as any, enabled: false },
+    providerOptions: { value: {}, enabled: false },
   });
 
   // Helper to merge node params with defaults (deep merge each field)
@@ -247,33 +259,26 @@ export function NodeConfigPanel({
     if (!nodeData.modelParams) return defaults;
 
     // Deep merge: for each field, use node value if exists, otherwise default
-    const merged = { ...defaults };
-    Object.keys(defaults).forEach((key) => {
-      const typedKey = key as keyof UIModelParams;
-      if (
-        nodeData.modelParams &&
-        nodeData.modelParams[typedKey] !== undefined
-      ) {
-        merged[typedKey] = nodeData.modelParams[typedKey] as any;
-      }
-    });
-    return merged;
+    return { ...defaults, ...nodeData.modelParams } as UIModelParams;
   };
 
-  // Handle model param updates - using any to simplify complex type handling
-  const updateModelParamValue = (key: string, value: any) => {
+  // Handle model param updates
+  const updateModelParamValue = (
+    key: keyof UIModelParams,
+    value: string | number | Record<string, unknown>,
+  ) => {
     const currentModelParams = getCompleteModelParams();
 
     const updatedParams = {
       ...currentModelParams,
       [key]: {
-        ...(currentModelParams as any)[key],
+        ...currentModelParams[key],
         value,
       },
     };
 
     onNodeUpdate(selectedNode.id, {
-      modelParams: updatedParams as any,
+      modelParams: updatedParams,
     });
   };
 
@@ -308,7 +313,7 @@ export function NodeConfigPanel({
             availableProviders={availableProviders}
             availableModels={availableModels}
             providerModelCombinations={providerModelCombinations}
-            updateModelParamValue={updateModelParamValue as any}
+            updateModelParamValue={updateModelParamValue}
             layout="vertical"
             isEmbedded
           />

@@ -20,7 +20,11 @@ import { WorkflowLoadDialog } from "./components/dialogs/WorkflowLoadDialog";
 import { NodeConfigPanel } from "./components/panels/NodeConfigPanel";
 import { PromptImportDialog } from "./components/dialogs/PromptImportDialog";
 import { ChatMessageType, ChatMessageRole, LLMAdapter } from "@langfuse/shared";
-import type { PromptChatMessageSchema } from "@langfuse/shared";
+import type {
+  PromptChatMessageSchema,
+  UIModelParams,
+  ChatMessage,
+} from "@langfuse/shared";
 import { z } from "zod/v4";
 
 type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
@@ -158,8 +162,9 @@ function WorkflowEditorContent() {
     }) => {
       if (selectedNodeId) {
         handleNodeUpdate(selectedNodeId, {
-          messages: promptData.messages as any,
-          modelParams: promptData.modelParams as any,
+          messages: promptData.messages as ChatMessage[],
+          modelParams: promptData.modelParams as Partial<UIModelParams> &
+            Pick<UIModelParams, "provider" | "model">,
         });
         setShowPromptImport(false);
       }
