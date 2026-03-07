@@ -131,7 +131,8 @@ function WorkflowEditorContent() {
           setIsLoading(false);
         });
     }
-  }, [workflowId, isNewWorkflow, projectId, load, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId, isNewWorkflow, projectId]);
 
   const handleAddAgent = useCallback(() => {
     const newNode: WorkflowNode = {
