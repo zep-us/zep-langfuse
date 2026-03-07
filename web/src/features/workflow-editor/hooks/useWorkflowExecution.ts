@@ -303,8 +303,18 @@ export function useWorkflowExecution(projectId: string) {
                 });
               }
             } catch (error) {
-              const errorMessage =
-                error instanceof Error ? error.message : "Unknown error";
+              // Extract error message from tRPC errors or regular errors
+              let errorMessage = "Unknown error";
+              if (error instanceof Error) {
+                errorMessage = error.message;
+                // Check for tRPC error with nested message
+                const trpcError = error as any;
+                if (trpcError?.data?.message) {
+                  errorMessage = trpcError.data.message;
+                } else if (trpcError?.message) {
+                  errorMessage = trpcError.message;
+                }
+              }
 
               setNodeState(nodeId, {
                 status: "error",

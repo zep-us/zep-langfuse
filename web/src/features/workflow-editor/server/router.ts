@@ -495,15 +495,53 @@ export const workflowRouter = createTRPCRouter({
         }
       } catch (error) {
         logger.error("Failed to execute workflow node", error);
+
+        // Re-throw TRPCErrors as-is
         if (error instanceof TRPCError) {
           throw error;
         }
+
+        // Handle OpenAI SDK and other API errors with status codes
+        if (error instanceof Error) {
+          const statusCode =
+            (error as any)?.response?.status ?? (error as any)?.status;
+          const errorMessage = error.message || "Workflow execution failed";
+
+          // Map HTTP status codes to appropriate TRPC error codes
+          if (statusCode === 401 || statusCode === 403) {
+            throw new TRPCError({
+              code: "UNAUTHORIZED",
+              message: `Authentication failed: ${errorMessage}. Please check your API key and IP restrictions.`,
+            });
+          }
+
+          if (statusCode === 429) {
+            throw new TRPCError({
+              code: "TOO_MANY_REQUESTS",
+              message: `Rate limit exceeded: ${errorMessage}. Please try again later.`,
+            });
+          }
+
+          if (statusCode === 400) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Invalid request: ${errorMessage}`,
+            });
+          }
+
+          // For other errors, include the status code in the message if available
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: statusCode
+              ? `API Error (${statusCode}): ${errorMessage}`
+              : errorMessage,
+          });
+        }
+
+        // Fallback for non-Error objects
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Workflow execution failed",
+          message: "Workflow execution failed with an unknown error",
         });
       }
     }),
