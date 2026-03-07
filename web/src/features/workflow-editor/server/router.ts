@@ -103,6 +103,9 @@ export const workflowRouter = createTRPCRouter({
             tags: string[];
             definition: Prisma.JsonValue;
             input_schema: Prisma.JsonValue | null;
+            last_execution_at: Date | null;
+            last_execution_results: Prisma.JsonValue | null;
+            last_execution_status: string | null;
           }>
         >(
           Prisma.sql`
@@ -117,7 +120,10 @@ export const workflowRouter = createTRPCRouter({
               version,
               tags,
               definition,
-              input_schema
+              input_schema,
+              last_execution_at,
+              last_execution_results,
+              last_execution_status
             FROM workflows
             WHERE project_id = ${input.projectId}
             ORDER BY name, version DESC, updated_at DESC
@@ -138,6 +144,9 @@ export const workflowRouter = createTRPCRouter({
           tags: w.tags,
           definition: w.definition,
           inputSchema: w.input_schema,
+          lastExecutionAt: w.last_execution_at,
+          lastExecutionResults: w.last_execution_results,
+          lastExecutionStatus: w.last_execution_status,
         }));
       } catch (error) {
         logger.error("Failed to get workflows", error);
