@@ -209,6 +209,52 @@ export function NodeConfigPanel({
     ],
   );
 
+  // Get upstream nodes (nodes that have edges pointing to this node)
+  const upstreamNodes = useMemo(() => {
+    if (!selectedNode) return [];
+    const upstreamNodeIds = edges
+      .filter((edge) => edge.target === selectedNode.id)
+      .map((edge) => edge.source);
+    return nodes.filter((node) => upstreamNodeIds.includes(node.id));
+  }, [selectedNode, edges, nodes]);
+
+  // Input mapping handlers
+  const handleAddInputMapping = useCallback(() => {
+    if (!selectedNode) return;
+    const newMapping: FieldMapping = {
+      sourceField: "",
+      targetVariable: "",
+      mappingType: "full",
+    };
+    const nodeData = selectedNode.data;
+    onNodeUpdate(selectedNode.id, {
+      inputMapping: [...(nodeData.inputMapping ?? []), newMapping],
+    });
+  }, [selectedNode, nodes, onNodeUpdate]);
+
+  const handleUpdateInputMapping = useCallback(
+    (index: number, updates: Partial<FieldMapping>) => {
+      if (!selectedNode) return;
+      const nodeData = selectedNode.data;
+      const updatedMappings = [...(nodeData.inputMapping ?? [])];
+      updatedMappings[index] = { ...updatedMappings[index]!, ...updates };
+      onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
+    },
+    [selectedNode, nodes, onNodeUpdate],
+  );
+
+  const handleRemoveInputMapping = useCallback(
+    (index: number) => {
+      if (!selectedNode) return;
+      const nodeData = selectedNode.data;
+      const updatedMappings = (nodeData.inputMapping ?? []).filter(
+        (_, i) => i !== index,
+      );
+      onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
+    },
+    [selectedNode, nodes, onNodeUpdate],
+  );
+
   // Early return after all hooks
   if (!selectedNode || selectedNode.type !== "agent") {
     return null;
@@ -234,49 +280,6 @@ export function NodeConfigPanel({
       },
     });
   };
-
-  // Get upstream nodes (nodes that have edges pointing to this node)
-  const upstreamNodes = useMemo(() => {
-    if (!selectedNode) return [];
-    const upstreamNodeIds = edges
-      .filter((edge) => edge.target === selectedNode.id)
-      .map((edge) => edge.source);
-    return nodes.filter((node) => upstreamNodeIds.includes(node.id));
-  }, [selectedNode, edges, nodes]);
-
-  // Input mapping handlers
-  const handleAddInputMapping = useCallback(() => {
-    if (!selectedNode) return;
-    const newMapping: FieldMapping = {
-      sourceField: "",
-      targetVariable: "",
-      mappingType: "full",
-    };
-    onNodeUpdate(selectedNode.id, {
-      inputMapping: [...(nodeData.inputMapping ?? []), newMapping],
-    });
-  }, [selectedNode, nodeData.inputMapping, onNodeUpdate]);
-
-  const handleUpdateInputMapping = useCallback(
-    (index: number, updates: Partial<FieldMapping>) => {
-      if (!selectedNode) return;
-      const updatedMappings = [...(nodeData.inputMapping ?? [])];
-      updatedMappings[index] = { ...updatedMappings[index]!, ...updates };
-      onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
-    },
-    [selectedNode, nodeData.inputMapping, onNodeUpdate],
-  );
-
-  const handleRemoveInputMapping = useCallback(
-    (index: number) => {
-      if (!selectedNode) return;
-      const updatedMappings = (nodeData.inputMapping ?? []).filter(
-        (_, i) => i !== index,
-      );
-      onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
-    },
-    [selectedNode, nodeData.inputMapping, onNodeUpdate],
-  );
 
   // Get available providers and models
   const availableProviders = Object.keys(supportedModels);
