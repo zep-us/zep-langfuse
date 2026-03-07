@@ -9,6 +9,7 @@ import {
   useEdgesState,
   type OnConnect,
   type NodeTypes,
+  type EdgeTypes,
   type NodeChange,
   type EdgeChange,
   BackgroundVariant,
@@ -17,6 +18,7 @@ import "@xyflow/react/dist/style.css";
 import { AgentNode } from "./nodes/AgentNode";
 import { InputNode } from "./nodes/InputNode";
 import { OutputNode } from "./nodes/OutputNode";
+import { CustomEdge } from "./edges/CustomEdge";
 import { wouldCreateCycle } from "../utils/graphValidation";
 import type { WorkflowNode, WorkflowEdge } from "../types";
 
@@ -118,6 +120,14 @@ export function WorkflowCanvas({
     [],
   );
 
+  // Define custom edge types
+  const edgeTypes: EdgeTypes = useMemo(
+    () => ({
+      default: CustomEdge,
+    }),
+    [],
+  );
+
   return (
     <div className="h-full w-full">
       <ReactFlow
@@ -129,12 +139,12 @@ export function WorkflowCanvas({
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}
         deleteKeyCode={null}
         defaultEdgeOptions={{
-          type: "smoothstep",
           animated: true,
         }}
       >

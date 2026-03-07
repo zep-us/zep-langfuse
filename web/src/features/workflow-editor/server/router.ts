@@ -496,6 +496,18 @@ export const workflowRouter = createTRPCRouter({
       } catch (error) {
         logger.error("Failed to execute workflow node", error);
 
+        // Log error structure for debugging
+        if (error instanceof Error) {
+          logger.error("Error details:", {
+            name: error.name,
+            message: error.message,
+            status: (error as any)?.status,
+            statusCode: (error as any)?.statusCode,
+            response: (error as any)?.response,
+            code: (error as any)?.code,
+          });
+        }
+
         // Re-throw TRPCErrors as-is
         if (error instanceof TRPCError) {
           throw error;
@@ -503,9 +515,22 @@ export const workflowRouter = createTRPCRouter({
 
         // Handle OpenAI SDK and other API errors with status codes
         if (error instanceof Error) {
-          const statusCode =
-            (error as any)?.response?.status ?? (error as any)?.status;
+          // Check multiple possible locations for status code
+          let statusCode =
+            (error as any)?.statusCode ??
+            (error as any)?.status ??
+            (error as any)?.response?.status ??
+            (error as any)?.response?.statusCode;
+
           const errorMessage = error.message || "Workflow execution failed";
+
+          // If status code not found in properties, try parsing from error message
+          if (!statusCode && errorMessage) {
+            const statusMatch = errorMessage.match(/^(\d{3})\s/);
+            if (statusMatch) {
+              statusCode = parseInt(statusMatch[1], 10);
+            }
+          }
 
           // Map HTTP status codes to appropriate TRPC error codes
           if (statusCode === 401 || statusCode === 403) {
