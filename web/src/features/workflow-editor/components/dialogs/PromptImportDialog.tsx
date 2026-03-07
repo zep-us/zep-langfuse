@@ -11,8 +11,8 @@ import { Input } from "@/src/components/ui/input";
 import { Loader2, FileText, Search } from "lucide-react";
 import { cn } from "@/src/utils/tailwind";
 import { api } from "@/src/utils/api";
-import type { PromptChatMessageSchema } from "@langfuse/shared";
 import { z } from "zod/v4";
+import type { PromptChatMessageSchema } from "@langfuse/shared";
 
 type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
 
