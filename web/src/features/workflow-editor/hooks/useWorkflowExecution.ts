@@ -4,6 +4,8 @@ import type {
   WorkflowEdge,
   NodeExecutionState,
   FieldMapping,
+  AgentNodeData,
+  InputNodeData,
 } from "../types";
 import { topologicalSort } from "../utils/graphValidation";
 import { useWorkflowExecutionContext } from "../context/WorkflowExecutionContext";
@@ -15,7 +17,7 @@ import { convertUIModelParamsToModelParams } from "../utils/modelParams";
  * Hook for executing a workflow DAG
  */
 export function useWorkflowExecution(projectId: string) {
-  const { setNodeState, addLogEntry, isExecuting } =
+  const { setNodeState, addLogEntry, isExecuting, setWorkflowResults } =
     useWorkflowExecutionContext();
   const executeNodeMutation = api.workflows.execute.useMutation();
 
@@ -127,13 +129,14 @@ export function useWorkflowExecution(projectId: string) {
       variables: Record<string, string>,
       nodeOutputs: Map<string, string>,
     ): Promise<string> => {
-      const maxRetries = node.data.retryConfig?.maxRetries ?? 0;
-      const retryDelay = node.data.retryConfig?.retryDelay ?? 1000;
+      const agentData = node.data as AgentNodeData;
+      const maxRetries = agentData.retryConfig?.maxRetries ?? 0;
+      const retryDelay = agentData.retryConfig?.retryDelay ?? 1000;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
           // Resolve variables in messages
-          const resolvedMessages = node.data.messages?.map((msg) => ({
+          const resolvedMessages = agentData.messages?.map((msg) => ({
             ...msg,
             content:
               typeof msg.content === "string"
@@ -143,7 +146,7 @@ export function useWorkflowExecution(projectId: string) {
 
           // Convert UIModelParams to plain ModelParams for server
           const modelParams = convertUIModelParamsToModelParams(
-            node.data.modelParams as UIModelParams,
+            agentData.modelParams as UIModelParams,
           );
 
           // Use tRPC mutation for authenticated execution
@@ -151,8 +154,8 @@ export function useWorkflowExecution(projectId: string) {
             projectId,
             messages: resolvedMessages ?? [],
             modelParams,
-            tools: node.data.tools?.length ? node.data.tools : undefined,
-            structuredOutputSchema: node.data.structuredOutputSchema?.schema,
+            tools: agentData.tools?.length ? agentData.tools : undefined,
+            structuredOutputSchema: agentData.structuredOutputSchema?.schema,
           });
 
           const output =
@@ -208,9 +211,26 @@ export function useWorkflowExecution(projectId: string) {
         throw new Error("Cannot execute workflow with cycles");
       }
 
+      // Extract inputVariables from Input node
+      const inputNode = nodes.find((n) => n.type === "input");
+      const extractedVariables: Record<string, string> = {};
+
+      if (inputNode) {
+        const inputData = inputNode.data as InputNodeData;
+        if (
+          inputData.inputVariables &&
+          Array.isArray(inputData.inputVariables)
+        ) {
+          for (const { name, value } of inputData.inputVariables) {
+            extractedVariables[name] = value;
+          }
+        }
+      }
+
       // Storage for node outputs
       const nodeOutputs = new Map<string, string>();
-      const globalVariables = { ...inputVariables };
+      // Merge extracted variables with passed inputVariables (passed ones take precedence)
+      const globalVariables = { ...extractedVariables, ...inputVariables };
 
       // Execute layers sequentially
       for (const layer of layers) {
@@ -237,7 +257,7 @@ export function useWorkflowExecution(projectId: string) {
             try {
               // Handle input nodes
               if (node.type === "input") {
-                const output = JSON.stringify(inputVariables);
+                const output = JSON.stringify(globalVariables);
                 nodeOutputs.set(nodeId, output);
                 setNodeState(nodeId, {
                   status: "completed",
@@ -270,9 +290,10 @@ export function useWorkflowExecution(projectId: string) {
 
               // Handle agent nodes
               if (node.type === "agent") {
+                const agentData = node.data as AgentNodeData;
                 // Apply input mappings
                 const variables = applyInputMappings(
-                  node.data.inputMapping ?? [],
+                  agentData.inputMapping ?? [],
                   nodeOutputs,
                   globalVariables,
                 );
@@ -298,7 +319,7 @@ export function useWorkflowExecution(projectId: string) {
                   nodeId,
                   timestamp: Date.now(),
                   type: "complete",
-                  message: `Completed ${node.data.label}`,
+                  message: `Completed ${agentData.label}`,
                   data: { outputLength: output.length },
                 });
               }
@@ -344,8 +365,32 @@ export function useWorkflowExecution(projectId: string) {
         type: "complete",
         message: "Workflow completed successfully",
       });
+
+      // Store final results from Output node
+      const outputNode = nodes.find((n) => n.type === "output");
+      if (outputNode) {
+        const outputNodeState = nodeOutputs.get(outputNode.id);
+        if (outputNodeState) {
+          try {
+            const parsedResults = JSON.parse(outputNodeState);
+            setWorkflowResults(parsedResults);
+          } catch {
+            // If parsing fails, store as single result
+            setWorkflowResults([
+              { nodeId: outputNode.id, output: outputNodeState },
+            ]);
+          }
+        }
+      }
     },
-    [isExecuting, setNodeState, addLogEntry, applyInputMappings, executeNode],
+    [
+      isExecuting,
+      setNodeState,
+      addLogEntry,
+      applyInputMappings,
+      executeNode,
+      setWorkflowResults,
+    ],
   );
 
   return {

@@ -12,13 +12,17 @@ import {
   FileInput,
 } from "lucide-react";
 import type { WorkflowNode, WorkflowEdge, WorkflowNodeData } from "./types";
-import { WorkflowExecutionProvider } from "./context/WorkflowExecutionContext";
+import {
+  WorkflowExecutionProvider,
+  useWorkflowExecutionContext,
+} from "./context/WorkflowExecutionContext";
 import { useWorkflowExecution } from "./hooks/useWorkflowExecution";
 import { useWorkflowPersistence } from "./hooks/useWorkflowPersistence";
 import { WorkflowSaveDialog } from "./components/dialogs/WorkflowSaveDialog";
 import { WorkflowLoadDialog } from "./components/dialogs/WorkflowLoadDialog";
 import { NodeConfigPanel } from "./components/panels/NodeConfigPanel";
 import { PromptImportDialog } from "./components/dialogs/PromptImportDialog";
+import { WorkflowOutputDialog } from "./components/dialogs/WorkflowOutputDialog";
 import { ChatMessageType, ChatMessageRole, LLMAdapter } from "@langfuse/shared";
 import type {
   PromptChatMessageSchema,
@@ -32,6 +36,8 @@ type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
 function WorkflowEditorContent() {
   const router = useRouter();
   const projectId = router.query.projectId as string;
+  const { workflowResults, showOutputDialog, setShowOutputDialog } =
+    useWorkflowExecutionContext();
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([
     {
@@ -276,24 +282,20 @@ function WorkflowEditorContent() {
           onClose={() => setSelectedNodeId(null)}
         />
       )}
+
+      {/* Workflow Output Dialog */}
+      <WorkflowOutputDialog
+        open={showOutputDialog}
+        onOpenChange={setShowOutputDialog}
+        results={workflowResults}
+      />
     </div>
   );
 }
 
 export default function WorkflowEditorPage() {
-  const router = useRouter();
-  const projectId = router.query.projectId as string;
-
-  const handleExecute = useCallback(
-    async (inputVariables: Record<string, string>) => {
-      // This will be implemented by the WorkflowEditorContent component
-      console.log("Execute with variables:", inputVariables);
-    },
-    [],
-  );
-
   return (
-    <WorkflowExecutionProvider onExecute={handleExecute}>
+    <WorkflowExecutionProvider>
       <WorkflowEditorContent />
     </WorkflowExecutionProvider>
   );

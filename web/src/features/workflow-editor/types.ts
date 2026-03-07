@@ -18,8 +18,14 @@ export interface RetryConfig {
   retryDelay: number; // milliseconds
 }
 
-// Node data stored in ReactFlow node
-export interface WorkflowNodeData extends Record<string, unknown> {
+// Input node specific data
+export interface InputNodeData extends Record<string, unknown> {
+  label: string;
+  inputVariables?: Array<{ name: string; value: string }>;
+}
+
+// Agent node specific data
+export interface AgentNodeData extends Record<string, unknown> {
   label: string;
   // Prompt reference (from Langfuse Prompt Management)
   promptId?: string;
@@ -38,6 +44,15 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   // Error handling
   retryConfig?: RetryConfig;
 }
+
+// Output node specific data
+export interface OutputNodeData extends Record<string, unknown> {
+  label: string;
+  inputMapping?: FieldMapping[];
+}
+
+// Node data stored in ReactFlow node (union of all node types)
+export type WorkflowNodeData = InputNodeData | AgentNodeData | OutputNodeData;
 
 // Node types supported in the workflow
 export type WorkflowNodeType = "agent" | "input" | "output";
@@ -87,4 +102,10 @@ export interface WorkflowMetadata {
   createdBy: string;
   definition: WorkflowDefinition;
   inputSchema?: unknown;
+}
+
+// Workflow execution result
+export interface WorkflowResult {
+  nodeId: string;
+  output: string;
 }

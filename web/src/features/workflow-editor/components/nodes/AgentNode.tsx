@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Bot, Loader2, Check, AlertCircle } from "lucide-react";
 import { cn } from "@/src/utils/tailwind";
-import type { WorkflowNodeData } from "../../types";
+import type { WorkflowNodeData, AgentNodeData } from "../../types";
 import { useWorkflowExecutionContext } from "../../context/WorkflowExecutionContext";
 
 export function AgentNode({
@@ -11,8 +11,9 @@ export function AgentNode({
 }: NodeProps<Node<WorkflowNodeData>>) {
   const { nodeStates } = useWorkflowExecutionContext();
   const nodeState = nodeStates.get(id);
+  const agentData = data as AgentNodeData;
   const hasModel = Boolean(
-    data.modelParams?.provider && data.modelParams?.model,
+    agentData.modelParams?.provider && agentData.modelParams?.model,
   );
 
   // Determine border color based on execution state
@@ -72,32 +73,33 @@ export function AgentNode({
           <>
             <div className="text-xs text-muted-foreground">
               <span className="font-medium">
-                {typeof data.modelParams?.provider === "object" &&
-                "value" in data.modelParams.provider
-                  ? data.modelParams.provider.value
-                  : data.modelParams?.provider}
+                {typeof agentData.modelParams?.provider === "object" &&
+                "value" in agentData.modelParams.provider
+                  ? agentData.modelParams.provider.value
+                  : agentData.modelParams?.provider}
               </span>
               {": "}
-              {typeof data.modelParams?.model === "object" &&
-              "value" in data.modelParams.model
-                ? data.modelParams.model.value
-                : data.modelParams?.model}
+              {typeof agentData.modelParams?.model === "object" &&
+              "value" in agentData.modelParams.model
+                ? agentData.modelParams.model.value
+                : agentData.modelParams?.model}
             </div>
-            {data.messages && data.messages.length > 0 && (
+            {agentData.messages && agentData.messages.length > 0 && (
               <div className="text-xs text-muted-foreground">
-                {data.messages.length} message
-                {data.messages.length !== 1 ? "s" : ""}
+                {agentData.messages.length} message
+                {agentData.messages.length !== 1 ? "s" : ""}
               </div>
             )}
-            {data.tools && data.tools.length > 0 && (
+            {agentData.tools && agentData.tools.length > 0 && (
               <div className="text-xs text-muted-foreground">
-                {data.tools.length} tool{data.tools.length !== 1 ? "s" : ""}
+                {agentData.tools.length} tool
+                {agentData.tools.length !== 1 ? "s" : ""}
               </div>
             )}
-            {data.inputMapping && data.inputMapping.length > 0 && (
+            {agentData.inputMapping && agentData.inputMapping.length > 0 && (
               <div className="text-xs text-muted-foreground">
-                {data.inputMapping.length} input mapping
-                {data.inputMapping.length !== 1 ? "s" : ""}
+                {agentData.inputMapping.length} input mapping
+                {agentData.inputMapping.length !== 1 ? "s" : ""}
               </div>
             )}
           </>

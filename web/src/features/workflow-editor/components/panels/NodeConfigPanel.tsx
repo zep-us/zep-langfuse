@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
+import { Textarea } from "@/src/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,8 @@ import type {
   WorkflowNodeData,
   WorkflowEdge,
   FieldMapping,
+  InputNodeData,
+  AgentNodeData,
 } from "../../types";
 import type {
   ChatMessage,
@@ -57,16 +60,21 @@ export function NodeConfigPanel({
 
   // Sync messages when node changes (only when node ID changes, not when messages change)
   useEffect(() => {
-    if (selectedNode?.data.messages) {
-      const messagesWithIds = selectedNode.data.messages.map((msg) => {
-        // Check if message already has an id (it's ChatMessageWithId)
-        if ("id" in msg && typeof msg.id === "string") {
-          return msg as ChatMessageWithId;
-        }
-        // Add id to ChatMessage
-        return { ...msg, id: uuidv4() } as ChatMessageWithId;
-      });
-      setMessages(messagesWithIds);
+    if (selectedNode?.type === "agent") {
+      const agentData = selectedNode.data as AgentNodeData;
+      if (agentData.messages) {
+        const messagesWithIds = agentData.messages.map((msg) => {
+          // Check if message already has an id (it's ChatMessageWithId)
+          if ("id" in msg && typeof msg.id === "string") {
+            return msg as ChatMessageWithId;
+          }
+          // Add id to ChatMessage
+          return { ...msg, id: uuidv4() } as ChatMessageWithId;
+        });
+        setMessages(messagesWithIds);
+      } else {
+        setMessages([]);
+      }
     } else {
       setMessages([]);
     }
@@ -218,45 +226,130 @@ export function NodeConfigPanel({
     return nodes.filter((node) => upstreamNodeIds.includes(node.id));
   }, [selectedNode, edges, nodes]);
 
+  // Structured output schema handler
+  const handleStructuredOutputSchemaChange = useCallback(
+    (value: string) => {
+      if (!selectedNode || selectedNode.type !== "agent") return;
+      const trimmedValue = value.trim();
+
+      if (!trimmedValue) {
+        // If empty, set to null
+        onNodeUpdate(selectedNode.id, { structuredOutputSchema: null });
+        return;
+      }
+
+      try {
+        // Try to parse as JSON to validate
+        const parsed = JSON.parse(trimmedValue);
+
+        // Store as PlaygroundSchema format
+        const agentData = selectedNode.data as AgentNodeData;
+        const existingSchema = agentData.structuredOutputSchema;
+
+        onNodeUpdate(selectedNode.id, {
+          structuredOutputSchema: {
+            id: existingSchema?.id ?? uuidv4(),
+            name: existingSchema?.name ?? "Structured Output",
+            description: existingSchema?.description ?? "",
+            schema: parsed,
+            existingLlmSchema: existingSchema?.existingLlmSchema,
+          },
+        });
+      } catch (_e) {
+        // Invalid JSON - still update to allow user to continue typing
+        // We'll just store the raw value in the schema field
+        const agentData = selectedNode.data as AgentNodeData;
+        const existingSchema = agentData.structuredOutputSchema;
+
+        onNodeUpdate(selectedNode.id, {
+          structuredOutputSchema: {
+            id: existingSchema?.id ?? uuidv4(),
+            name: existingSchema?.name ?? "Structured Output",
+            description: existingSchema?.description ?? "",
+            schema: value as any, // Store raw string during editing
+            existingLlmSchema: existingSchema?.existingLlmSchema,
+          },
+        });
+      }
+    },
+    [selectedNode, onNodeUpdate],
+  );
+
   // Input mapping handlers
   const handleAddInputMapping = useCallback(() => {
-    if (!selectedNode) return;
+    if (!selectedNode || selectedNode.type !== "agent") return;
     const newMapping: FieldMapping = {
       sourceField: "",
       targetVariable: "",
       mappingType: "full",
     };
-    const nodeData = selectedNode.data;
+    const agentData = selectedNode.data as AgentNodeData;
     onNodeUpdate(selectedNode.id, {
-      inputMapping: [...(nodeData.inputMapping ?? []), newMapping],
+      inputMapping: [...(agentData.inputMapping ?? []), newMapping],
     });
-  }, [selectedNode, nodes, onNodeUpdate]);
+  }, [selectedNode, onNodeUpdate]);
 
   const handleUpdateInputMapping = useCallback(
     (index: number, updates: Partial<FieldMapping>) => {
-      if (!selectedNode) return;
-      const nodeData = selectedNode.data;
-      const updatedMappings = [...(nodeData.inputMapping ?? [])];
+      if (!selectedNode || selectedNode.type !== "agent") return;
+      const agentData = selectedNode.data as AgentNodeData;
+      const updatedMappings = [...(agentData.inputMapping ?? [])];
       updatedMappings[index] = { ...updatedMappings[index]!, ...updates };
       onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
     },
-    [selectedNode, nodes, onNodeUpdate],
+    [selectedNode, onNodeUpdate],
   );
 
   const handleRemoveInputMapping = useCallback(
     (index: number) => {
-      if (!selectedNode) return;
-      const nodeData = selectedNode.data;
-      const updatedMappings = (nodeData.inputMapping ?? []).filter(
+      if (!selectedNode || selectedNode.type !== "agent") return;
+      const agentData = selectedNode.data as AgentNodeData;
+      const updatedMappings = (agentData.inputMapping ?? []).filter(
         (_, i) => i !== index,
       );
       onNodeUpdate(selectedNode.id, { inputMapping: updatedMappings });
     },
-    [selectedNode, nodes, onNodeUpdate],
+    [selectedNode, onNodeUpdate],
+  );
+
+  // Input variables handlers (for input nodes)
+  const handleAddInputVariable = useCallback(() => {
+    if (!selectedNode || selectedNode.type !== "input") return;
+    const nodeData = selectedNode.data as InputNodeData;
+    const newVariable = { name: "", value: "" };
+    onNodeUpdate(selectedNode.id, {
+      inputVariables: [...(nodeData.inputVariables ?? []), newVariable],
+    });
+  }, [selectedNode, onNodeUpdate]);
+
+  const handleUpdateInputVariable = useCallback(
+    (index: number, field: "name" | "value", value: string) => {
+      if (!selectedNode || selectedNode.type !== "input") return;
+      const nodeData = selectedNode.data as InputNodeData;
+      const updatedVariables = [...(nodeData.inputVariables ?? [])];
+      updatedVariables[index] = { ...updatedVariables[index]!, [field]: value };
+      onNodeUpdate(selectedNode.id, { inputVariables: updatedVariables });
+    },
+    [selectedNode, onNodeUpdate],
+  );
+
+  const handleRemoveInputVariable = useCallback(
+    (index: number) => {
+      if (!selectedNode || selectedNode.type !== "input") return;
+      const nodeData = selectedNode.data as InputNodeData;
+      const updatedVariables = (nodeData.inputVariables ?? []).filter(
+        (_, i) => i !== index,
+      );
+      onNodeUpdate(selectedNode.id, { inputVariables: updatedVariables });
+    },
+    [selectedNode, onNodeUpdate],
   );
 
   // Early return after all hooks
-  if (!selectedNode || selectedNode.type !== "agent") {
+  if (
+    !selectedNode ||
+    (selectedNode.type !== "agent" && selectedNode.type !== "input")
+  ) {
     return null;
   }
 
@@ -272,10 +365,11 @@ export function NodeConfigPanel({
     field: "maxRetries" | "retryDelay",
     value: number,
   ) => {
+    const agentData = nodeData as AgentNodeData;
     onNodeUpdate(selectedNode.id, {
       retryConfig: {
-        maxRetries: nodeData.retryConfig?.maxRetries ?? 3,
-        retryDelay: nodeData.retryConfig?.retryDelay ?? 1000,
+        maxRetries: agentData.retryConfig?.maxRetries ?? 3,
+        retryDelay: agentData.retryConfig?.retryDelay ?? 1000,
         [field]: value,
       },
     });
@@ -283,7 +377,9 @@ export function NodeConfigPanel({
 
   // Get available providers and models
   const availableProviders = Object.keys(supportedModels);
-  const currentProvider = nodeData.modelParams?.provider || LLMAdapter.OpenAI;
+  const agentData =
+    selectedNode.type === "agent" ? (nodeData as AgentNodeData) : null;
+  const currentProvider = agentData?.modelParams?.provider || LLMAdapter.OpenAI;
   const providerValue =
     typeof currentProvider === "object" && "value" in currentProvider
       ? currentProvider.value
@@ -316,10 +412,12 @@ export function NodeConfigPanel({
   // Helper to merge node params with defaults (deep merge each field)
   const getCompleteModelParams = (): UIModelParams => {
     const defaults = getDefaultModelParams();
-    if (!nodeData.modelParams) return defaults;
+    if (selectedNode.type !== "agent") return defaults;
+    const agentData = nodeData as AgentNodeData;
+    if (!agentData.modelParams) return defaults;
 
     // Deep merge: for each field, use node value if exists, otherwise default
-    return { ...defaults, ...nodeData.modelParams } as UIModelParams;
+    return { ...defaults, ...agentData.modelParams } as UIModelParams;
   };
 
   // Handle model param updates
@@ -365,229 +463,384 @@ export function NodeConfigPanel({
           />
         </div>
 
-        {/* Model Configuration */}
-        <div className="space-y-2">
-          <Label>Model</Label>
-          <ModelParameters
-            modelParams={getCompleteModelParams()}
-            availableProviders={availableProviders}
-            availableModels={availableModels}
-            providerModelCombinations={providerModelCombinations}
-            updateModelParamValue={updateModelParamValue}
-            layout="vertical"
-            isEmbedded
-          />
-        </div>
-
-        {/* Messages */}
-        <div className="space-y-2">
-          <Label>Messages</Label>
-          <div className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3">
-            <ChatMessages {...messagesContext} />
-          </div>
-        </div>
-
-        {/* Input Mapping */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Input Mapping</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddInputMapping}
-              disabled={upstreamNodes.length === 0}
-            >
-              <Plus className="mr-1 h-3 w-3" />
-              Add Mapping
-            </Button>
-          </div>
-
-          {upstreamNodes.length === 0 ? (
-            <div className="text-xs text-muted-foreground">
-              Connect upstream nodes to add input mappings
+        {/* Input Variables (only for input nodes) */}
+        {selectedNode.type === "input" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Input Variables</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddInputVariable}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add Variable
+              </Button>
             </div>
-          ) : (
+
             <div className="space-y-3">
-              {(nodeData.inputMapping ?? []).map((mapping, index) => (
-                <div
-                  key={index}
-                  className="space-y-2 rounded-md border bg-muted/30 p-3"
-                >
-                  <div className="flex items-start justify-between">
-                    <Label className="text-xs font-normal">
-                      Mapping {index + 1}
-                    </Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => handleRemoveInputMapping(index)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+              {((nodeData as InputNodeData).inputVariables ?? []).map(
+                (variable, index) => (
+                  <div
+                    key={index}
+                    className="space-y-2 rounded-md border bg-muted/30 p-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <Label className="text-xs font-normal">
+                        Variable {index + 1}
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => handleRemoveInputVariable(index)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
 
-                  {/* Source Node Selection */}
-                  <div className="space-y-1">
-                    <Label htmlFor={`source-node-${index}`} className="text-xs">
-                      Source Node
-                    </Label>
-                    <Select
-                      value={mapping.sourceField.split(".")[0] ?? ""}
-                      onValueChange={(nodeId) => {
-                        const fieldPath = mapping.sourceField.split(".")[1];
-                        handleUpdateInputMapping(index, {
-                          sourceField: fieldPath
-                            ? `${nodeId}.${fieldPath}`
-                            : `${nodeId}.output`,
-                        });
-                      }}
-                    >
-                      <SelectTrigger id={`source-node-${index}`}>
-                        <SelectValue placeholder="Select source node" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {upstreamNodes.map((node) => (
-                          <SelectItem key={node.id} value={node.id}>
-                            {node.data.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`var-name-${index}`} className="text-xs">
+                        Name
+                      </Label>
+                      <Input
+                        id={`var-name-${index}`}
+                        placeholder="e.g., topic"
+                        value={variable.name}
+                        onChange={(e) =>
+                          handleUpdateInputVariable(
+                            index,
+                            "name",
+                            e.target.value,
+                          )
+                        }
+                      />
+                    </div>
 
-                  {/* Field Path */}
-                  <div className="space-y-1">
-                    <Label htmlFor={`field-path-${index}`} className="text-xs">
-                      Field Path (optional, e.g., "output.topic")
-                    </Label>
-                    <Input
-                      id={`field-path-${index}`}
-                      placeholder="output (default)"
-                      value={
-                        mapping.sourceField.split(".").slice(1).join(".") || ""
-                      }
-                      onChange={(e) => {
-                        const nodeId = mapping.sourceField.split(".")[0];
-                        const fieldPath = e.target.value.trim();
-                        handleUpdateInputMapping(index, {
-                          sourceField: fieldPath
-                            ? `${nodeId}.${fieldPath}`
-                            : `${nodeId}.output`,
-                        });
-                      }}
-                    />
+                    <div className="space-y-1">
+                      <Label htmlFor={`var-value-${index}`} className="text-xs">
+                        Value
+                      </Label>
+                      <Input
+                        id={`var-value-${index}`}
+                        placeholder="e.g., AI ethics"
+                        value={variable.value}
+                        onChange={(e) =>
+                          handleUpdateInputVariable(
+                            index,
+                            "value",
+                            e.target.value,
+                          )
+                        }
+                      />
+                    </div>
                   </div>
+                ),
+              )}
 
-                  {/* Target Variable */}
-                  <div className="space-y-1">
-                    <Label htmlFor={`target-var-${index}`} className="text-xs">
-                      Variable Name (use in messages as {`{{name}}`})
-                    </Label>
-                    <Input
-                      id={`target-var-${index}`}
-                      placeholder="e.g., topic"
-                      value={mapping.targetVariable}
-                      onChange={(e) =>
-                        handleUpdateInputMapping(index, {
-                          targetVariable: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-
-                  {/* Mapping Type */}
-                  <div className="space-y-1">
-                    <Label className="text-xs">Mapping Type</Label>
-                    <Select
-                      value={mapping.mappingType}
-                      onValueChange={(value: "full" | "field") =>
-                        handleUpdateInputMapping(index, {
-                          mappingType: value,
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="full">
-                          Full Output (entire result)
-                        </SelectItem>
-                        <SelectItem value="field">
-                          Field Extraction (specific field)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              ))}
-
-              {(nodeData.inputMapping ?? []).length === 0 && (
+              {((nodeData as InputNodeData).inputVariables ?? []).length ===
+                0 && (
                 <div className="text-xs text-muted-foreground">
-                  No input mappings configured. Click "Add Mapping" to create
+                  No input variables configured. Click "Add Variable" to create
                   one.
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Tools Configuration (placeholder) */}
-        {nodeData.tools && nodeData.tools.length > 0 && (
+        {/* Model Configuration (only for agent nodes) */}
+        {selectedNode.type === "agent" && (
           <div className="space-y-2">
-            <Label>Tools</Label>
-            <div className="text-xs text-muted-foreground">
-              {nodeData.tools.length} tool
-              {nodeData.tools.length !== 1 ? "s" : ""} configured
+            <Label>Model</Label>
+            <ModelParameters
+              modelParams={getCompleteModelParams()}
+              availableProviders={availableProviders}
+              availableModels={availableModels}
+              providerModelCombinations={providerModelCombinations}
+              updateModelParamValue={updateModelParamValue}
+              layout="vertical"
+              isEmbedded
+            />
+          </div>
+        )}
+
+        {/* Messages (only for agent nodes) */}
+        {selectedNode.type === "agent" && (
+          <div className="space-y-2">
+            <Label>Messages</Label>
+            <div className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3">
+              <ChatMessages {...messagesContext} />
             </div>
           </div>
         )}
 
-        {/* Retry Configuration */}
-        <div className="space-y-4">
-          <Label>Retry Configuration</Label>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="max-retries" className="text-xs font-normal">
-                Max Retries
-              </Label>
-              <Input
-                id="max-retries"
-                type="number"
-                min={0}
-                max={10}
-                value={nodeData.retryConfig?.maxRetries ?? 3}
-                onChange={(e) =>
-                  handleRetryConfigChange(
-                    "maxRetries",
-                    parseInt(e.target.value) || 0,
-                  )
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="retry-delay" className="text-xs font-normal">
-                Retry Delay (ms)
-              </Label>
-              <Input
-                id="retry-delay"
-                type="number"
-                min={0}
-                step={100}
-                value={nodeData.retryConfig?.retryDelay ?? 1000}
-                onChange={(e) =>
-                  handleRetryConfigChange(
-                    "retryDelay",
-                    parseInt(e.target.value) || 0,
-                  )
-                }
-              />
+        {/* Structured Output Schema (only for agent nodes) */}
+        {selectedNode.type === "agent" && (
+          <div className="space-y-2">
+            <Label htmlFor="structured-output-schema">
+              Structured Output Schema (Optional)
+            </Label>
+            <Textarea
+              id="structured-output-schema"
+              placeholder={`Example JSON Schema:
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "age": { "type": "number" }
+  },
+  "required": ["name"]
+}`}
+              className="font-mono text-xs"
+              rows={8}
+              value={(() => {
+                const schema = (nodeData as AgentNodeData)
+                  .structuredOutputSchema?.schema;
+                if (!schema) return "";
+                if (typeof schema === "string") return schema;
+                return JSON.stringify(schema, null, 2);
+              })()}
+              onChange={(e) =>
+                handleStructuredOutputSchemaChange(e.target.value)
+              }
+            />
+            <div className="text-xs text-muted-foreground">
+              Define a JSON Schema to enforce structured output format from the
+              agent.
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Input Mapping (only for agent nodes) */}
+        {selectedNode.type === "agent" && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Input Mapping</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddInputMapping}
+                disabled={upstreamNodes.length === 0}
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                Add Mapping
+              </Button>
+            </div>
+
+            {upstreamNodes.length === 0 ? (
+              <div className="text-xs text-muted-foreground">
+                Connect upstream nodes to add input mappings
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {((nodeData as AgentNodeData).inputMapping ?? []).map(
+                  (mapping, index) => (
+                    <div
+                      key={index}
+                      className="space-y-2 rounded-md border bg-muted/30 p-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <Label className="text-xs font-normal">
+                          Mapping {index + 1}
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleRemoveInputMapping(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+
+                      {/* Source Node Selection */}
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor={`source-node-${index}`}
+                          className="text-xs"
+                        >
+                          Source Node
+                        </Label>
+                        <Select
+                          value={mapping.sourceField.split(".")[0] ?? ""}
+                          onValueChange={(nodeId) => {
+                            const fieldPath = mapping.sourceField.split(".")[1];
+                            handleUpdateInputMapping(index, {
+                              sourceField: fieldPath
+                                ? `${nodeId}.${fieldPath}`
+                                : `${nodeId}.output`,
+                            });
+                          }}
+                        >
+                          <SelectTrigger id={`source-node-${index}`}>
+                            <SelectValue placeholder="Select source node" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {upstreamNodes.map((node) => (
+                              <SelectItem key={node.id} value={node.id}>
+                                {node.data.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Field Path */}
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor={`field-path-${index}`}
+                          className="text-xs"
+                        >
+                          Field Path (optional, e.g., "output.topic")
+                        </Label>
+                        <Input
+                          id={`field-path-${index}`}
+                          placeholder="output (default)"
+                          value={
+                            mapping.sourceField.split(".").slice(1).join(".") ||
+                            ""
+                          }
+                          onChange={(e) => {
+                            const nodeId = mapping.sourceField.split(".")[0];
+                            const fieldPath = e.target.value.trim();
+                            handleUpdateInputMapping(index, {
+                              sourceField: fieldPath
+                                ? `${nodeId}.${fieldPath}`
+                                : `${nodeId}.output`,
+                            });
+                          }}
+                        />
+                      </div>
+
+                      {/* Target Variable */}
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor={`target-var-${index}`}
+                          className="text-xs"
+                        >
+                          Variable Name (use in messages as {`{{name}}`})
+                        </Label>
+                        <Input
+                          id={`target-var-${index}`}
+                          placeholder="e.g., topic"
+                          value={mapping.targetVariable}
+                          onChange={(e) =>
+                            handleUpdateInputMapping(index, {
+                              targetVariable: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      {/* Mapping Type */}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Mapping Type</Label>
+                        <Select
+                          value={mapping.mappingType}
+                          onValueChange={(value: "full" | "field") =>
+                            handleUpdateInputMapping(index, {
+                              mappingType: value,
+                            })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full">
+                              Full Output (entire result)
+                            </SelectItem>
+                            <SelectItem value="field">
+                              Field Extraction (specific field)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ),
+                )}
+
+                {((nodeData as AgentNodeData).inputMapping ?? []).length ===
+                  0 && (
+                  <div className="text-xs text-muted-foreground">
+                    No input mappings configured. Click "Add Mapping" to create
+                    one.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tools Configuration (placeholder) */}
+        {selectedNode.type === "agent" &&
+          (nodeData as AgentNodeData).tools &&
+          (nodeData as AgentNodeData).tools!.length > 0 && (
+            <div className="space-y-2">
+              <Label>Tools</Label>
+              <div className="text-xs text-muted-foreground">
+                {(nodeData as AgentNodeData).tools!.length} tool
+                {(nodeData as AgentNodeData).tools!.length !== 1
+                  ? "s"
+                  : ""}{" "}
+                configured
+              </div>
+            </div>
+          )}
+
+        {/* Retry Configuration (only for agent nodes) */}
+        {selectedNode.type === "agent" && (
+          <div className="space-y-4">
+            <Label>Retry Configuration</Label>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="max-retries" className="text-xs font-normal">
+                  Max Retries
+                </Label>
+                <Input
+                  id="max-retries"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={
+                    (nodeData as AgentNodeData).retryConfig?.maxRetries ?? 3
+                  }
+                  onChange={(e) =>
+                    handleRetryConfigChange(
+                      "maxRetries",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="retry-delay" className="text-xs font-normal">
+                  Retry Delay (ms)
+                </Label>
+                <Input
+                  id="retry-delay"
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={
+                    (nodeData as AgentNodeData).retryConfig?.retryDelay ?? 1000
+                  }
+                  onChange={(e) =>
+                    handleRetryConfigChange(
+                      "retryDelay",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

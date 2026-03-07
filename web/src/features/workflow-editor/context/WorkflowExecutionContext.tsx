@@ -5,7 +5,11 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import type { NodeExecutionState, ExecutionLogEntry } from "../types";
+import type {
+  NodeExecutionState,
+  ExecutionLogEntry,
+  WorkflowResult,
+} from "../types";
 
 interface WorkflowExecutionContextType {
   // Execution control
@@ -21,6 +25,14 @@ interface WorkflowExecutionContextType {
   isExecuting: boolean;
   executionLog: ExecutionLogEntry[];
   addLogEntry: (entry: ExecutionLogEntry) => void;
+
+  // Workflow results
+  workflowResults: WorkflowResult[];
+  setWorkflowResults: (results: WorkflowResult[]) => void;
+
+  // Output dialog
+  showOutputDialog: boolean;
+  setShowOutputDialog: (show: boolean) => void;
 }
 
 const WorkflowExecutionContext =
@@ -38,18 +50,18 @@ export function useWorkflowExecutionContext() {
 
 interface WorkflowExecutionProviderProps {
   children: ReactNode;
-  onExecute?: (inputVariables: Record<string, string>) => Promise<void>;
 }
 
 export function WorkflowExecutionProvider({
   children,
-  onExecute,
 }: WorkflowExecutionProviderProps) {
   const [nodeStates, setNodeStates] = useState<Map<string, NodeExecutionState>>(
     new Map(),
   );
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionLog, setExecutionLog] = useState<ExecutionLogEntry[]>([]);
+  const [workflowResults, setWorkflowResults] = useState<WorkflowResult[]>([]);
+  const [showOutputDialog, setShowOutputDialog] = useState(false);
 
   const setNodeState = useCallback(
     (nodeId: string, state: NodeExecutionState) => {
@@ -78,24 +90,9 @@ export function WorkflowExecutionProvider({
 
       // Clear previous execution states
       setNodeStates(new Map());
-
-      try {
-        if (onExecute) {
-          await onExecute(inputVariables);
-        }
-      } catch (error) {
-        console.error("Workflow execution failed:", error);
-        addLogEntry({
-          nodeId: "system",
-          timestamp: Date.now(),
-          type: "error",
-          message: error instanceof Error ? error.message : "Unknown error",
-        });
-      } finally {
-        setIsExecuting(false);
-      }
+      setWorkflowResults([]);
     },
-    [isExecuting, onExecute, addLogEntry],
+    [isExecuting],
   );
 
   const stopExecution = useCallback(() => {
@@ -124,6 +121,10 @@ export function WorkflowExecutionProvider({
         isExecuting,
         executionLog,
         addLogEntry,
+        workflowResults,
+        setWorkflowResults,
+        showOutputDialog,
+        setShowOutputDialog,
       }}
     >
       {children}
