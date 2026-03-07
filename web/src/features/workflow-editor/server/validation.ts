@@ -124,3 +124,17 @@ export const GetAllWorkflowsInput = z.object({
   limit: z.number().int().min(1).max(100).optional().default(50),
   offset: z.number().int().min(0).optional().default(0),
 });
+
+// Save execution results input
+export const SaveExecutionResultsInput = z.object({
+  projectId: z.string(),
+  workflowId: z.string(),
+  results: z.array(
+    z.object({
+      nodeId: z.string(),
+      output: z.string(),
+    }),
+  ),
+  status: z.enum(["success", "error", "pending"]),
+  timestamp: z.number(),
+});

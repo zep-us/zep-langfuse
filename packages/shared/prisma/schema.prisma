@@ -830,6 +830,10 @@ model Workflow {
 
   inputSchema Json?   @map("input_schema") @db.Json
 
+  lastExecutionAt      DateTime? @map("last_execution_at")
+  lastExecutionResults Json?     @map("last_execution_results") @db.Json
+  lastExecutionStatus  String?   @map("last_execution_status")
+
   @@unique([projectId, name, version])
   @@index([projectId, id])
   @@index([createdAt])

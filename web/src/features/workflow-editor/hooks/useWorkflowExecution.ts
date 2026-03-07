@@ -17,9 +17,16 @@ import { convertUIModelParamsToModelParams } from "../utils/modelParams";
  * Hook for executing a workflow DAG
  */
 export function useWorkflowExecution(projectId: string) {
-  const { setNodeState, addLogEntry, isExecuting, setWorkflowResults } =
-    useWorkflowExecutionContext();
+  const {
+    setNodeState,
+    addLogEntry,
+    isExecuting,
+    setWorkflowResults,
+    workflowId,
+  } = useWorkflowExecutionContext();
   const executeNodeMutation = api.workflows.execute.useMutation();
+  const saveExecutionMutation =
+    api.workflows.saveExecutionResults.useMutation();
 
   /**
    * Resolves variables in messages using mustache-style {{variable}} templates
@@ -374,11 +381,50 @@ export function useWorkflowExecution(projectId: string) {
           try {
             const parsedResults = JSON.parse(outputNodeState);
             setWorkflowResults(parsedResults);
+
+            // Save execution results if workflowId is available
+            if (workflowId) {
+              saveExecutionMutation.mutate(
+                {
+                  projectId,
+                  workflowId,
+                  results: parsedResults,
+                  status: "success",
+                  timestamp: Date.now(),
+                },
+                {
+                  onError: (error) => {
+                    console.error("Failed to save execution results:", error);
+                    // Don't throw - this is a non-critical operation
+                  },
+                },
+              );
+            }
           } catch {
             // If parsing fails, store as single result
-            setWorkflowResults([
+            const fallbackResults = [
               { nodeId: outputNode.id, output: outputNodeState },
-            ]);
+            ];
+            setWorkflowResults(fallbackResults);
+
+            // Save execution results if workflowId is available
+            if (workflowId) {
+              saveExecutionMutation.mutate(
+                {
+                  projectId,
+                  workflowId,
+                  results: fallbackResults,
+                  status: "success",
+                  timestamp: Date.now(),
+                },
+                {
+                  onError: (error) => {
+                    console.error("Failed to save execution results:", error);
+                    // Don't throw - this is a non-critical operation
+                  },
+                },
+              );
+            }
           }
         }
       }
@@ -390,6 +436,8 @@ export function useWorkflowExecution(projectId: string) {
       applyInputMappings,
       executeNode,
       setWorkflowResults,
+      workflowId,
+      saveExecutionMutation,
     ],
   );
 

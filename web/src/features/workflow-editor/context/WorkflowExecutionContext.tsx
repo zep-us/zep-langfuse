@@ -33,6 +33,10 @@ interface WorkflowExecutionContextType {
   // Output dialog
   showOutputDialog: boolean;
   setShowOutputDialog: (show: boolean) => void;
+
+  // Workflow ID
+  workflowId: string | null;
+  setWorkflowId: (id: string | null) => void;
 }
 
 const WorkflowExecutionContext =
@@ -62,6 +66,7 @@ export function WorkflowExecutionProvider({
   const [executionLog, setExecutionLog] = useState<ExecutionLogEntry[]>([]);
   const [workflowResults, setWorkflowResults] = useState<WorkflowResult[]>([]);
   const [showOutputDialog, setShowOutputDialog] = useState(false);
+  const [workflowId, setWorkflowId] = useState<string | null>(null);
 
   const setNodeState = useCallback(
     (nodeId: string, state: NodeExecutionState) => {
@@ -125,6 +130,8 @@ export function WorkflowExecutionProvider({
         setWorkflowResults,
         showOutputDialog,
         setShowOutputDialog,
+        workflowId,
+        setWorkflowId,
       }}
     >
       {children}

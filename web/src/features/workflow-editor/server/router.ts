@@ -16,6 +16,7 @@ import {
   GetWorkflowByIdInput,
   GetWorkflowByNameInput,
   GetAllWorkflowsInput,
+  SaveExecutionResultsInput,
 } from "./validation";
 
 export const workflowRouter = createTRPCRouter({
@@ -356,6 +357,48 @@ export const workflowRouter = createTRPCRouter({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Deleting workflow failed",
+        });
+      }
+    }),
+
+  saveExecutionResults: protectedProjectProcedure
+    .input(SaveExecutionResultsInput)
+    .mutation(async ({ input, ctx }) => {
+      try {
+        throwIfNoProjectAccess({
+          session: ctx.session,
+          projectId: input.projectId,
+          scope: "workflows:CUD",
+        });
+
+        // Update workflow with execution data
+        const workflow = await ctx.prisma.workflow.update({
+          where: { id: input.workflowId },
+          data: {
+            lastExecutionAt: new Date(input.timestamp),
+            lastExecutionResults: input.results as Prisma.InputJsonValue,
+            lastExecutionStatus: input.status,
+          },
+        });
+
+        // Audit log
+        await auditLog({
+          session: ctx.session,
+          resourceType: "workflow",
+          resourceId: workflow.id,
+          action: "update",
+          after: workflow,
+        });
+
+        return { success: true };
+      } catch (error) {
+        logger.error("Failed to save execution results", error);
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Saving execution results failed",
         });
       }
     }),

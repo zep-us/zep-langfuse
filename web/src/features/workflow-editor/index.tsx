@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/router";
 import Header from "@/src/components/layouts/header";
 import { WorkflowCanvas } from "./components/WorkflowCanvas";
@@ -10,6 +10,9 @@ import {
   StopCircle,
   FolderOpen,
   FileInput,
+  Clock,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import type { WorkflowNode, WorkflowEdge, WorkflowNodeData } from "./types";
 import {
@@ -30,14 +33,20 @@ import type {
   ChatMessage,
 } from "@langfuse/shared";
 import { z } from "zod/v4";
+import { formatDistanceToNow } from "date-fns";
 
 type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
 
 function WorkflowEditorContent() {
   const router = useRouter();
   const projectId = router.query.projectId as string;
-  const { workflowResults, showOutputDialog, setShowOutputDialog } =
-    useWorkflowExecutionContext();
+  const {
+    workflowResults,
+    showOutputDialog,
+    setShowOutputDialog,
+    setWorkflowId,
+    setWorkflowResults,
+  } = useWorkflowExecutionContext();
 
   const [nodes, setNodes] = useState<WorkflowNode[]>([
     {
@@ -80,6 +89,18 @@ function WorkflowEditorContent() {
   ]);
 
   const { execute, isExecuting } = useWorkflowExecution(projectId);
+
+  // Set workflowId from router query
+  useEffect(() => {
+    const queryWorkflowId = router.query.workflowId as string | undefined;
+    setWorkflowId(queryWorkflowId ?? null);
+  }, [router.query.workflowId, setWorkflowId]);
+
+  // Load execution history when workflow is loaded
+  const [lastExecutionAt, setLastExecutionAt] = useState<Date | null>(null);
+  const [lastExecutionStatus, setLastExecutionStatus] = useState<
+    "success" | "error" | "pending" | null
+  >(null);
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showLoadDialog, setShowLoadDialog] = useState(false);
@@ -132,9 +153,36 @@ function WorkflowEditorContent() {
 
   const handleLoad = useCallback(
     async (workflowId: string) => {
-      await load(workflowId);
+      const workflow = await load(workflowId);
+
+      // Load execution history if it exists
+      if (workflow?.lastExecutionResults) {
+        try {
+          const results = workflow.lastExecutionResults as unknown as Array<{
+            nodeId: string;
+            output: string;
+          }>;
+          setWorkflowResults(results);
+
+          // Optionally auto-open output dialog if results exist
+          // Uncomment the line below to enable auto-open:
+          // setShowOutputDialog(true);
+        } catch (error) {
+          console.error("Failed to parse execution results:", error);
+        }
+      }
+
+      // Set execution metadata
+      if (workflow?.lastExecutionAt) {
+        setLastExecutionAt(workflow.lastExecutionAt);
+      }
+      if (workflow?.lastExecutionStatus) {
+        setLastExecutionStatus(
+          workflow.lastExecutionStatus as "success" | "error" | "pending",
+        );
+      }
     },
-    [load],
+    [load, setWorkflowResults],
   );
 
   const handleNodeUpdate = useCallback(
@@ -182,57 +230,91 @@ function WorkflowEditorContent() {
     <div className="flex h-screen flex-col">
       <Header
         title="Workflow Editor"
+        help={{
+          description:
+            "Build multi-agent workflows by connecting nodes. Import prompts, configure agents, and execute workflows.",
+        }}
         actionButtons={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowLoadDialog(true)}
-              disabled={isExecuting}
-            >
-              <FolderOpen className="mr-1 h-4 w-4" />
-              Load
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPromptImport(true)}
-              disabled={isExecuting || !selectedNodeId}
-            >
-              <FileInput className="mr-1 h-4 w-4" />
-              Import Prompt
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAddAgent}
-              disabled={isExecuting}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add Agent
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSaveDialog(true)}
-              disabled={isExecuting}
-            >
-              <Save className="mr-1 h-4 w-4" />
-              Save
-            </Button>
-            <Button size="sm" onClick={handleRun} disabled={isExecuting}>
-              {isExecuting ? (
-                <>
-                  <StopCircle className="mr-1 h-4 w-4" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className="mr-1 h-4 w-4" />
-                  Run
-                </>
-              )}
-            </Button>
+          <div className="flex items-center gap-4">
+            {/* Last Execution Info */}
+            {lastExecutionAt && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {lastExecutionStatus === "success" ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                ) : lastExecutionStatus === "error" ? (
+                  <XCircle className="h-4 w-4 text-red-600" />
+                ) : (
+                  <Clock className="h-4 w-4" />
+                )}
+                <span>
+                  Last run:{" "}
+                  {formatDistanceToNow(new Date(lastExecutionAt), {
+                    addSuffix: true,
+                  })}
+                </span>
+                {workflowResults.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowOutputDialog(true)}
+                    className="h-auto p-1 text-xs"
+                  >
+                    View Results
+                  </Button>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLoadDialog(true)}
+                disabled={isExecuting}
+              >
+                <FolderOpen className="mr-1 h-4 w-4" />
+                Load
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPromptImport(true)}
+                disabled={isExecuting || !selectedNodeId}
+              >
+                <FileInput className="mr-1 h-4 w-4" />
+                Import Prompt
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddAgent}
+                disabled={isExecuting}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add Agent
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSaveDialog(true)}
+                disabled={isExecuting}
+              >
+                <Save className="mr-1 h-4 w-4" />
+                Save
+              </Button>
+              <Button size="sm" onClick={handleRun} disabled={isExecuting}>
+                {isExecuting ? (
+                  <>
+                    <StopCircle className="mr-1 h-4 w-4" />
+                    Running...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-1 h-4 w-4" />
+                    Run
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         }
       />

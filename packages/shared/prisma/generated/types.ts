@@ -959,6 +959,9 @@ export type Workflow = {
   tags: Generated<string[]>;
   definition: unknown;
   input_schema: unknown | null;
+  last_execution_at: Timestamp | null;
+  last_execution_results: unknown | null;
+  last_execution_status: string | null;
 };
 export type DB = {
   Account: Account;

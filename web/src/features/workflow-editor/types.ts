@@ -109,3 +109,13 @@ export interface WorkflowResult {
   nodeId: string;
   output: string;
 }
+
+// Execution status
+export type ExecutionStatus = "success" | "error" | "pending";
+
+// Execution history entry
+export interface ExecutionHistory {
+  timestamp: number;
+  results: WorkflowResult[];
+  status: ExecutionStatus;
+}
