@@ -90,63 +90,44 @@ export const workflowRouter = createTRPCRouter({
 
         // Get latest version of each workflow name
         // Using DISTINCT ON pattern
-        const workflows = await ctx.prisma.$queryRaw<
-          Array<{
-            id: string;
-            created_at: Date;
-            updated_at: Date;
-            project_id: string;
-            created_by: string;
-            name: string;
-            description: string;
-            version: number;
-            tags: string[];
-            definition: Prisma.JsonValue;
-            input_schema: Prisma.JsonValue | null;
-            last_execution_at: Date | null;
-            last_execution_results: Prisma.JsonValue | null;
-            last_execution_status: string | null;
-          }>
-        >(
-          Prisma.sql`
-            SELECT DISTINCT ON (name)
-              id,
-              created_at,
-              updated_at,
-              project_id,
-              created_by,
-              name,
-              description,
-              version,
-              tags,
-              definition,
-              input_schema,
-              last_execution_at,
-              last_execution_results,
-              last_execution_status
-            FROM workflows
-            WHERE project_id = ${input.projectId}
-            ORDER BY name, version DESC, updated_at DESC
-            LIMIT ${input.limit}
-            OFFSET ${input.offset}
-          `,
+        // Use Prisma ORM to automatically handle optional execution history fields
+        const allWorkflows = await ctx.prisma.workflow.findMany({
+          where: { projectId: input.projectId },
+          orderBy: [
+            { name: "asc" },
+            { version: "desc" },
+            { updatedAt: "desc" },
+          ],
+        });
+
+        // Get latest version of each workflow (DISTINCT ON name)
+        const workflowsByName = new Map<string, (typeof allWorkflows)[0]>();
+        for (const workflow of allWorkflows) {
+          if (!workflowsByName.has(workflow.name)) {
+            workflowsByName.set(workflow.name, workflow);
+          }
+        }
+
+        const workflows = Array.from(workflowsByName.values()).slice(
+          input.offset,
+          input.offset + input.limit,
         );
 
         return workflows.map((w) => ({
           id: w.id,
-          createdAt: w.created_at,
-          updatedAt: w.updated_at,
-          projectId: w.project_id,
-          createdBy: w.created_by,
+          createdAt: w.createdAt,
+          updatedAt: w.updatedAt,
+          projectId: w.projectId,
+          createdBy: w.createdBy,
           name: w.name,
           description: w.description,
           version: w.version,
           tags: w.tags,
           definition: w.definition,
-          inputSchema: w.input_schema,
-          lastExecutionAt: w.last_execution_at,
-          lastExecutionResults: w.last_execution_results,
-          lastExecutionStatus: w.last_execution_status,
+          inputSchema: w.inputSchema,
+          lastExecutionAt: w.lastExecutionAt ?? null,
+          lastExecutionResults: w.lastExecutionResults ?? null,
+          lastExecutionStatus: w.lastExecutionStatus ?? null,
         }));
       } catch (error) {
         logger.error("Failed to get workflows", error);
