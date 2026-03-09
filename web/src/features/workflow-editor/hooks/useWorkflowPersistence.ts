@@ -116,6 +116,9 @@ export function useWorkflowPersistence({
             mappingType: "field" | "full";
           }[];
           retryConfig?: { maxRetries?: number; retryDelay?: number };
+          executionMode?: "llm" | "tool" | "passthrough";
+          toolType?: string;
+          toolConfig?: Record<string, unknown>;
         };
       };
 

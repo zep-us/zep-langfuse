@@ -656,10 +656,10 @@ export function NodeConfigPanel({
                     toolType: e.target.value,
                   })
                 }
-                placeholder="e.g., neo4j-vector-search"
+                placeholder="e.g., http-api-call"
               />
               <div className="text-xs text-muted-foreground">
-                Available: neo4j-vector-search
+                Available: http-api-call, neo4j-vector-search (deprecated)
               </div>
 
               <Label>Tool Configuration (JSON)</Label>
@@ -667,10 +667,10 @@ export function NodeConfigPanel({
                 className="font-mono text-xs"
                 rows={6}
                 placeholder={`{
-  "indexName": "achievement_standard_index_openai",
-  "topK": 5,
-  "embeddingModel": "text-embedding-3-small",
-  "queryField": "current_message"
+  "apiUrlEnvVar": "WORKFLOW_TOOL_SEARCH_API_URL",
+  "apiPath": "/api/v1/search-standards-vector",
+  "apiKeyEnvVar": "WORKFLOW_TOOL_SEARCH_API_KEY",
+  "requestBodyTemplate": "{\\"query\\": \\"$\{current_message}\\", \\"top_k\\": 10}"
 }`}
                 value={(() => {
                   const config = (nodeData as AgentNodeData).toolConfig;

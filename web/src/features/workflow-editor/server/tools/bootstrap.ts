@@ -6,3 +6,4 @@
  */
 
 import "./neo4j-vector-search";
+import "./http-api-call";

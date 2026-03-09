@@ -18,9 +18,9 @@ import type { ToolDefinition } from "../types";
 
 const neo4jVectorSearchTool: ToolDefinition = {
   type: "neo4j-vector-search",
-  label: "Neo4j Vector Search",
+  label: "Neo4j Vector Search (Deprecated)",
   description:
-    "Search achievement standards in Neo4j using vector similarity (embedding-based search)",
+    "[DEPRECATED] Use 'HTTP API Call' tool instead. Search achievement standards in Neo4j using vector similarity (embedding-based search)",
   configFields: [
     {
       key: "indexName",
