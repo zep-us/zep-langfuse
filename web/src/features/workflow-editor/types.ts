@@ -178,3 +178,26 @@ export interface ExecutionHistory {
   results: WorkflowResult[];
   status: ExecutionStatus;
 }
+
+// Multi-turn chat session types
+export interface ChatSessionMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: number;
+}
+
+export interface ChatSessionTurn {
+  turnIndex: number;
+  userMessage: string;
+  executionPath: ExecutionLogEntry[];
+  outputNodeId?: string;
+  response?: string;
+}
+
+export interface WorkflowChatSession {
+  messages: ChatSessionMessage[];
+  turns: ChatSessionTurn[];
+  workflowContext: Record<string, unknown>;
+  isAwaitingInput: boolean;
+  currentTurnIndex: number;
+}

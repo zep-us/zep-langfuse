@@ -10,6 +10,8 @@ import {
   StopCircle,
   FolderOpen,
   FileInput,
+  X,
+  GitBranch,
 } from "lucide-react";
 import type {
   WorkflowNode,
@@ -25,6 +27,7 @@ import { useWorkflowPersistence } from "@/src/features/workflow-editor/hooks/use
 import { WorkflowSaveDialog } from "@/src/features/workflow-editor/components/dialogs/WorkflowSaveDialog";
 import { WorkflowLoadDialog } from "@/src/features/workflow-editor/components/dialogs/WorkflowLoadDialog";
 import { NodeConfigPanel } from "@/src/features/workflow-editor/components/panels/NodeConfigPanel";
+import { RunPanel } from "@/src/features/workflow-editor/components/panels/RunPanel";
 import { PromptImportDialog } from "@/src/features/workflow-editor/components/dialogs/PromptImportDialog";
 import { WorkflowOutputDialog } from "@/src/features/workflow-editor/components/dialogs/WorkflowOutputDialog";
 import { ChatMessageType, ChatMessageRole, LLMAdapter } from "@langfuse/shared";
@@ -35,6 +38,7 @@ import type {
 } from "@langfuse/shared";
 import { z } from "zod/v4";
 import { api } from "@/src/utils/api";
+import { cn } from "@/src/utils/tailwind";
 
 type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
 
@@ -100,6 +104,7 @@ function WorkflowEditorContent() {
   const [showLoadDialog, setShowLoadDialog] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showPromptImport, setShowPromptImport] = useState(false);
+  const [activeTab, setActiveTab] = useState<"config" | "run" | null>(null);
 
   const utils = api.useUtils();
 
@@ -213,13 +218,15 @@ function WorkflowEditorContent() {
   const handleNodeClick = useCallback(
     (event: React.MouseEvent, node: WorkflowNode) => {
       setSelectedNodeId(node.id);
+      setActiveTab("config");
     },
     [],
   );
 
   const handleCanvasClick = useCallback(() => {
     setSelectedNodeId(null);
-  }, []);
+    if (activeTab === "config") setActiveTab(null);
+  }, [activeTab]);
 
   const handlePromptImport = useCallback(
     (promptData: {
@@ -295,7 +302,14 @@ function WorkflowEditorContent() {
               <Save className="mr-1 h-4 w-4" />
               Save
             </Button>
-            <Button size="sm" onClick={handleRun} disabled={isExecuting}>
+            <Button
+              size="sm"
+              onClick={() => {
+                void handleRun();
+                setActiveTab("run");
+              }}
+              disabled={isExecuting}
+            >
               {isExecuting ? (
                 <>
                   <StopCircle className="mr-1 h-4 w-4" />
@@ -311,15 +325,82 @@ function WorkflowEditorContent() {
           </div>
         }
       />
-      <div className="flex-1 overflow-hidden">
-        <WorkflowCanvas
-          initialNodes={nodes}
-          initialEdges={edges}
-          onNodesChange={setNodes}
-          onEdgesChange={setEdges}
-          onNodeClick={handleNodeClick}
-          onPaneClick={handleCanvasClick}
-        />
+      <div className="relative flex flex-1 overflow-hidden">
+        <div className="min-w-0 flex-1">
+          <WorkflowCanvas
+            initialNodes={nodes}
+            initialEdges={edges}
+            onNodesChange={setNodes}
+            onEdgesChange={setEdges}
+            onNodeClick={handleNodeClick}
+            onPaneClick={handleCanvasClick}
+          />
+        </div>
+        {/* Right Side Panel */}
+        {activeTab !== null && (
+          <div className="flex w-[480px] flex-shrink-0 flex-col border-l bg-background">
+            {/* Tab Headers */}
+            <div className="flex items-center border-b">
+              <button
+                className={cn(
+                  "flex-1 px-4 py-2 text-sm font-medium",
+                  activeTab === "config"
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setActiveTab("config")}
+              >
+                Config
+              </button>
+              <button
+                className={cn(
+                  "flex-1 px-4 py-2 text-sm font-medium",
+                  activeTab === "run"
+                    ? "border-b-2 border-primary text-primary"
+                    : "text-muted-foreground",
+                )}
+                onClick={() => setActiveTab("run")}
+              >
+                Run
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="mr-1 h-7 w-7"
+                onClick={() => {
+                  setActiveTab(null);
+                  setSelectedNodeId(null);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {/* Tab Content */}
+            <div className="flex-1 overflow-hidden">
+              {activeTab === "config" ? (
+                selectedNodeId ? (
+                  <NodeConfigPanel
+                    selectedNodeId={selectedNodeId}
+                    nodes={nodes}
+                    edges={edges}
+                    onNodeUpdate={handleNodeUpdate}
+                    onClose={() => {
+                      setSelectedNodeId(null);
+                      setActiveTab(null);
+                    }}
+                    projectId={projectId}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+                    Select a node to configure
+                  </div>
+                )
+              ) : (
+                <RunPanel nodes={nodes} edges={edges} projectId={projectId} />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Save Dialog */}
@@ -346,18 +427,6 @@ function WorkflowEditorContent() {
         projectId={projectId}
         onImport={handlePromptImport}
       />
-
-      {/* Node Configuration Panel */}
-      {selectedNodeId && (
-        <NodeConfigPanel
-          selectedNodeId={selectedNodeId}
-          nodes={nodes}
-          edges={edges}
-          onNodeUpdate={handleNodeUpdate}
-          onClose={() => setSelectedNodeId(null)}
-          projectId={projectId}
-        />
-      )}
 
       {/* Workflow Output Dialog */}
       <WorkflowOutputDialog

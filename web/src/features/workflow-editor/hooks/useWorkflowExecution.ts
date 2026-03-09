@@ -25,6 +25,37 @@ import { convertUIModelParamsToModelParams } from "../utils/modelParams";
 type NodeStatus = "pending" | "running" | "completed" | "error" | "skipped";
 
 /**
+ * Tries to parse a string as JSON. If direct parse fails, extracts JSON from
+ * markdown code fences (```json ... ```) or finds the first { or [ block.
+ * Returns the parsed value or null if no valid JSON found.
+ */
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    // LLMs often wrap JSON in markdown code fences
+    const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (fenceMatch?.[1]) {
+      try {
+        return JSON.parse(fenceMatch[1].trim());
+      } catch {
+        // fence content isn't valid JSON
+      }
+    }
+    // Try to find first { or [ block
+    const jsonStart = text.search(/[{[]/);
+    if (jsonStart >= 0) {
+      try {
+        return JSON.parse(text.slice(jsonStart));
+      } catch {
+        // Not valid JSON
+      }
+    }
+    return null;
+  }
+}
+
+/**
  * Hook for executing a workflow DAG with router, conditional branching, and loop support.
  *
  * Uses a ready-queue-based engine with activation accounting instead of
@@ -57,10 +88,10 @@ export function useWorkflowExecution(projectId: string) {
       let resolved = text;
 
       const variablePattern = /\{\{([^}]+)\}\}/g;
-      resolved = resolved.replace(variablePattern, (match, varName) => {
+      resolved = resolved.replace(variablePattern, (_match, varName) => {
         const trimmedVar = varName.trim();
 
-        if (variables[trimmedVar]) {
+        if (trimmedVar in variables && variables[trimmedVar] !== undefined) {
           return variables[trimmedVar];
         }
 
@@ -87,7 +118,9 @@ export function useWorkflowExecution(projectId: string) {
           }
         }
 
-        return match;
+        // Unresolved variables default to empty string instead of leaving
+        // literal {{variable}} text (which confuses LLMs)
+        return "";
       });
 
       return resolved;
@@ -258,6 +291,7 @@ export function useWorkflowExecution(projectId: string) {
       nodes: WorkflowNode[],
       edges: WorkflowEdge[],
       inputVariables: Record<string, string> = {},
+      previousContext?: Record<string, unknown>,
     ) => {
       if (isExecuting) {
         throw new Error("Workflow is already executing");
@@ -274,6 +308,13 @@ export function useWorkflowExecution(projectId: string) {
 
         // --- 1c. Initialize shared workflow context (GAP-3) ---
         const workflowContext = new Map<string, unknown>();
+
+        // Seed from previous turn's context (multi-turn chat support)
+        if (previousContext) {
+          for (const [key, value] of Object.entries(previousContext)) {
+            workflowContext.set(key, value);
+          }
+        }
 
         // --- 2. Build execution state ---
         const nodeOutputs = new Map<string, string>();
@@ -341,7 +382,23 @@ export function useWorkflowExecution(projectId: string) {
             }
           }
         }
-        const globalVariables = { ...extractedVariables, ...inputVariables };
+        const globalVariables: Record<string, string> = {
+          ...extractedVariables,
+          ...inputVariables,
+        };
+
+        // Merge previousContext values into globalVariables for template resolution.
+        // This ensures accumulated state from prior turns (e.g. has_existing_quizzes,
+        // confirmed_standards) is available as {{variable}} in agent prompts.
+        // Priority: inputVariables > extractedVariables > previousContext.
+        if (previousContext) {
+          for (const [key, value] of Object.entries(previousContext)) {
+            if (!(key in globalVariables)) {
+              globalVariables[key] =
+                typeof value === "string" ? value : JSON.stringify(value);
+            }
+          }
+        }
 
         // Seed workflow context from global variables
         for (const [key, value] of Object.entries(globalVariables)) {
@@ -470,15 +527,18 @@ export function useWorkflowExecution(projectId: string) {
 
                   // Write context outputs (GAP-3)
                   if (agentData.contextWrites) {
-                    try {
-                      const parsed = JSON.parse(output);
+                    const parsed = tryParseJson(output);
+                    if (parsed !== null && typeof parsed === "object") {
                       for (const key of agentData.contextWrites) {
-                        if (parsed[key] !== undefined) {
-                          workflowContext.set(key, parsed[key]);
+                        if (
+                          (parsed as Record<string, unknown>)[key] !== undefined
+                        ) {
+                          workflowContext.set(
+                            key,
+                            (parsed as Record<string, unknown>)[key],
+                          );
                         }
                       }
-                    } catch {
-                      // Non-JSON output, skip context writes
                     }
                   }
 
@@ -817,6 +877,25 @@ export function useWorkflowExecution(projectId: string) {
             }
           }
         }
+
+        // Convert workflowContext to plain object for multi-turn persistence
+        const finalContext: Record<string, unknown> = {};
+        for (const [key, value] of workflowContext.entries()) {
+          finalContext[key] = value;
+        }
+
+        // Collect all output node results with their upstream agent outputs
+        const outputNodeResults: Record<string, string> = {};
+        for (const node of nodes) {
+          if (node.type === "output") {
+            const output = nodeOutputs.get(node.id);
+            if (output) {
+              outputNodeResults[node.id] = output;
+            }
+          }
+        }
+
+        return { context: finalContext, outputNodeResults };
       } finally {
         setIsExecuting(false);
       }

@@ -9,6 +9,7 @@ import type {
   NodeExecutionState,
   ExecutionLogEntry,
   WorkflowResult,
+  WorkflowChatSession,
 } from "../types";
 
 interface WorkflowExecutionContextType {
@@ -26,6 +27,7 @@ interface WorkflowExecutionContextType {
   setIsExecuting: (executing: boolean) => void;
   executionLog: ExecutionLogEntry[];
   addLogEntry: (entry: ExecutionLogEntry) => void;
+  clearExecutionLog: () => void;
 
   // Workflow results
   workflowResults: WorkflowResult[];
@@ -38,6 +40,11 @@ interface WorkflowExecutionContextType {
   // Workflow ID
   workflowId: string | null;
   setWorkflowId: (id: string | null) => void;
+
+  // Chat session
+  chatSession: WorkflowChatSession;
+  setChatSession: (session: WorkflowChatSession) => void;
+  resetChatSession: () => void;
 }
 
 const WorkflowExecutionContext =
@@ -69,6 +76,27 @@ export function WorkflowExecutionProvider({
   const [showOutputDialog, setShowOutputDialog] = useState(false);
   const [workflowId, setWorkflowId] = useState<string | null>(null);
 
+  const defaultChatSession: WorkflowChatSession = {
+    messages: [],
+    turns: [],
+    workflowContext: {},
+    isAwaitingInput: true,
+    currentTurnIndex: 0,
+  };
+
+  const [chatSession, setChatSession] =
+    useState<WorkflowChatSession>(defaultChatSession);
+
+  const resetChatSession = useCallback(() => {
+    setChatSession({
+      messages: [],
+      turns: [],
+      workflowContext: {},
+      isAwaitingInput: true,
+      currentTurnIndex: 0,
+    });
+  }, []);
+
   const setNodeState = useCallback(
     (nodeId: string, state: NodeExecutionState) => {
       setNodeStates((prev) => {
@@ -82,6 +110,10 @@ export function WorkflowExecutionProvider({
 
   const addLogEntry = useCallback((entry: ExecutionLogEntry) => {
     setExecutionLog((prev) => [...prev, entry]);
+  }, []);
+
+  const clearExecutionLog = useCallback(() => {
+    setExecutionLog([]);
   }, []);
 
   const executeWorkflow = useCallback(
@@ -128,12 +160,16 @@ export function WorkflowExecutionProvider({
         setIsExecuting,
         executionLog,
         addLogEntry,
+        clearExecutionLog,
         workflowResults,
         setWorkflowResults,
         showOutputDialog,
         setShowOutputDialog,
         workflowId,
         setWorkflowId,
+        chatSession,
+        setChatSession,
+        resetChatSession,
       }}
     >
       {children}

@@ -398,8 +398,8 @@ export const workflowRouter = createTRPCRouter({
       z.object({
         projectId: z.string(),
         toolType: z.string(),
-        toolConfig: z.record(z.unknown()),
-        inputData: z.record(z.unknown()),
+        toolConfig: z.record(z.string(), z.unknown()),
+        inputData: z.record(z.string(), z.unknown()),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -501,14 +501,14 @@ export const workflowRouter = createTRPCRouter({
         const LLMApiKey = await ctx.prisma.llmApiKeys.findFirst({
           where: {
             projectId: input.projectId,
-            provider: input.modelParams.provider,
+            adapter: input.modelParams.adapter,
           },
         });
 
         if (!LLMApiKey) {
           throw new TRPCError({
             code: "NOT_FOUND",
-            message: `No ${input.modelParams.provider} API key found in project. Please add one in the project settings.`,
+            message: `No API key found for adapter "${input.modelParams.adapter}" in project. Please add one in the project settings.`,
           });
         }
 
@@ -516,7 +516,7 @@ export const workflowRouter = createTRPCRouter({
         if (!parsedKey.success) {
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: `Could not parse API key for provider ${input.modelParams.provider}: ${parsedKey.error.message}`,
+            message: `Could not parse API key for adapter ${input.modelParams.adapter}: ${parsedKey.error.message}`,
           });
         }
 

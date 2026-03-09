@@ -14,23 +14,71 @@ import type {
 } from "../types";
 
 /**
+ * Extracts JSON from markdown code fences (```json ... ``` or ``` ... ```).
+ * LLMs commonly wrap JSON responses in markdown — this handles that.
+ * Returns the parsed object or null if no valid JSON found.
+ */
+function extractJsonFromMarkdown(text: string): unknown {
+  // Try ```json ... ``` or ``` ... ```
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch?.[1]) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch {
+      // fence content isn't valid JSON
+    }
+  }
+
+  // Try to find first { ... } or [ ... ] block in the text
+  const jsonStart = text.search(/[{[]/);
+  if (jsonStart >= 0) {
+    try {
+      return JSON.parse(text.slice(jsonStart));
+    } catch {
+      // Not valid JSON from that point
+    }
+  }
+
+  return null;
+}
+
+/**
  * Extracts a value from a JSON string (or plain string) using a dot-separated field path.
  * Returns undefined if extraction fails.
  */
 export function extractFieldValue(output: string, fieldPath: string): unknown {
-  const parts = fieldPath.split(".");
+  // Strip leading "output." prefix — it's a namespace convention meaning
+  // "the upstream node's output", not a literal key in the JSON.
+  // e.g. "output.intent" → look for "intent" in the parsed output.
+  const normalizedPath =
+    fieldPath.startsWith("output.") && fieldPath !== "output"
+      ? fieldPath.slice("output.".length)
+      : fieldPath;
 
-  // Try JSON parse first
+  const parts = normalizedPath.split(".");
+
+  // Try JSON parse, with markdown code fence extraction fallback
   let current: unknown;
   try {
     current = JSON.parse(output);
   } catch {
-    // If not JSON, treat the whole string as "output"
-    if (parts.length === 1 && parts[0] === "output") {
-      return output;
+    // LLMs often wrap JSON in markdown code fences — extract it
+    const jsonFromMarkdown = extractJsonFromMarkdown(output);
+    if (jsonFromMarkdown !== null) {
+      current = jsonFromMarkdown;
+    } else {
+      // If not JSON, treat the whole string as "output"
+      if (normalizedPath === "output" || fieldPath === "output") {
+        return output;
+      }
+      // For "something", wrap in an object so parts can traverse
+      current = { output };
     }
-    // For "output.something", wrap in an object
-    current = { output };
+  }
+
+  // If fieldPath was exactly "output" (after normalization), return the parsed value
+  if (fieldPath === "output") {
+    return current;
   }
 
   for (const part of parts) {

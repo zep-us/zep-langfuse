@@ -1,4 +1,4 @@
-import { X, Plus, Trash2, FileInput, Link2 } from "lucide-react";
+import { Plus, Trash2, FileInput, Link2 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
@@ -520,15 +520,7 @@ export function NodeConfigPanel({
   };
 
   return (
-    <div className="fixed right-0 top-0 z-50 flex h-full w-[600px] flex-col border-l bg-background shadow-lg">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-lg font-semibold">Node Configuration</h2>
-        <Button variant="ghost" size="icon" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
+    <div className="flex h-full flex-col">
       {/* Content */}
       <div className="flex-1 space-y-6 overflow-y-auto p-4">
         {/* Label */}
