@@ -13,6 +13,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  GitBranch,
 } from "lucide-react";
 import type { WorkflowNode, WorkflowEdge, WorkflowNodeData } from "./types";
 import {
@@ -126,6 +127,19 @@ function WorkflowEditorContent() {
       data: {
         label: `Agent ${nodes.filter((n) => n.type === "agent").length + 1}`,
         messages: [],
+      },
+    };
+    setNodes((prev) => [...prev, newNode]);
+  }, [nodes]);
+
+  const handleAddRouter = useCallback(() => {
+    const newNode: WorkflowNode = {
+      id: `router-${Date.now()}`,
+      type: "router",
+      position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
+      data: {
+        label: `Router ${nodes.filter((n) => n.type === "router").length + 1}`,
+        routeField: "output",
       },
     };
     setNodes((prev) => [...prev, newNode]);
@@ -295,6 +309,15 @@ function WorkflowEditorContent() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={handleAddRouter}
+                disabled={isExecuting}
+              >
+                <GitBranch className="mr-1 h-4 w-4" />
+                Add Router
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowSaveDialog(true)}
                 disabled={isExecuting}
               >
@@ -362,6 +385,7 @@ function WorkflowEditorContent() {
           edges={edges}
           onNodeUpdate={handleNodeUpdate}
           onClose={() => setSelectedNodeId(null)}
+          projectId={projectId}
         />
       )}
 

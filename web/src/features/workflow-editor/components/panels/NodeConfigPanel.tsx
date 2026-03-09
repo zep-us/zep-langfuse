@@ -1,4 +1,4 @@
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, FileInput, Link2 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
@@ -21,6 +21,7 @@ import type {
   FieldMapping,
   InputNodeData,
   AgentNodeData,
+  RouterNodeData,
 } from "../../types";
 import type {
   ChatMessage,
@@ -31,6 +32,11 @@ import type {
 import { LLMAdapter, supportedModels } from "@langfuse/shared";
 import { createEmptyMessage } from "@/src/components/ChatMessages/utils/createEmptyMessage";
 import { v4 as uuidv4 } from "uuid";
+import { PromptImportDialog } from "../dialogs/PromptImportDialog";
+import type { PromptChatMessageSchema } from "@langfuse/shared";
+import { z } from "zod/v4";
+
+type PromptMessage = z.infer<typeof PromptChatMessageSchema>;
 
 interface NodeConfigPanelProps {
   selectedNodeId: string | null;
@@ -38,6 +44,7 @@ interface NodeConfigPanelProps {
   edges: WorkflowEdge[];
   onNodeUpdate: (nodeId: string, updates: Partial<WorkflowNodeData>) => void;
   onClose: () => void;
+  projectId: string;
 }
 
 export function NodeConfigPanel({
@@ -46,6 +53,7 @@ export function NodeConfigPanel({
   edges,
   onNodeUpdate,
   onClose,
+  projectId,
 }: NodeConfigPanelProps) {
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId),
@@ -345,10 +353,42 @@ export function NodeConfigPanel({
     [selectedNode, onNodeUpdate],
   );
 
+  // Prompt import state
+  const [showPromptImport, setShowPromptImport] = useState(false);
+
+  const handlePromptImport = useCallback(
+    (promptData: {
+      messages: PromptMessage[];
+      modelParams: Record<string, unknown>;
+    }) => {
+      if (!selectedNode || selectedNode.type !== "agent") return;
+      const messagesWithIds = promptData.messages.map((msg) => ({
+        ...msg,
+        id: uuidv4(),
+      })) as ChatMessageWithId[];
+      setMessages(messagesWithIds);
+      const updates: Partial<WorkflowNodeData> = {
+        messages: promptData.messages as ChatMessage[],
+      };
+      // Apply model params from prompt config if available
+      if (Object.keys(promptData.modelParams).length > 0) {
+        updates.modelParams = {
+          ...(selectedNode.data as AgentNodeData).modelParams,
+          ...promptData.modelParams,
+        } as AgentNodeData["modelParams"];
+      }
+      onNodeUpdate(selectedNode.id, updates);
+      setShowPromptImport(false);
+    },
+    [selectedNode, onNodeUpdate],
+  );
+
   // Early return after all hooks
   if (
     !selectedNode ||
-    (selectedNode.type !== "agent" && selectedNode.type !== "input")
+    (selectedNode.type !== "agent" &&
+      selectedNode.type !== "input" &&
+      selectedNode.type !== "router")
   ) {
     return null;
   }
@@ -409,6 +449,24 @@ export function NodeConfigPanel({
     providerOptions: { value: {}, enabled: false },
   });
 
+  // Normalize a modelParams field value to { value, enabled } format
+  // Handles both flat values (from saved workflow JSON) and UIModelParams format
+  const normalizeParamField = <T,>(
+    fieldValue: unknown,
+    defaultField: { value: T; enabled: boolean },
+  ): { value: T; enabled: boolean } => {
+    if (fieldValue === undefined || fieldValue === null) return defaultField;
+    if (
+      typeof fieldValue === "object" &&
+      fieldValue !== null &&
+      "value" in fieldValue
+    ) {
+      return fieldValue as { value: T; enabled: boolean };
+    }
+    // Flat value from saved workflow - convert to UIModelParams format
+    return { value: fieldValue as T, enabled: true };
+  };
+
   // Helper to merge node params with defaults (deep merge each field)
   const getCompleteModelParams = (): UIModelParams => {
     const defaults = getDefaultModelParams();
@@ -416,8 +474,29 @@ export function NodeConfigPanel({
     const agentData = nodeData as AgentNodeData;
     if (!agentData.modelParams) return defaults;
 
-    // Deep merge: for each field, use node value if exists, otherwise default
-    return { ...defaults, ...agentData.modelParams } as UIModelParams;
+    const p = agentData.modelParams as Record<string, unknown>;
+
+    // Normalize each field: supports both flat (saved JSON) and UIModelParams (UI) formats
+    return {
+      provider: normalizeParamField(p.provider, defaults.provider),
+      model: normalizeParamField(p.model, defaults.model),
+      adapter: normalizeParamField(p.adapter, defaults.adapter),
+      temperature: normalizeParamField(p.temperature, defaults.temperature),
+      max_tokens: normalizeParamField(p.max_tokens, defaults.max_tokens),
+      top_p: normalizeParamField(p.top_p, defaults.top_p),
+      maxTemperature: normalizeParamField(
+        p.maxTemperature,
+        defaults.maxTemperature,
+      ),
+      maxReasoningTokens: normalizeParamField(
+        p.maxReasoningTokens,
+        defaults.maxReasoningTokens,
+      ),
+      providerOptions: normalizeParamField(
+        p.providerOptions,
+        defaults.providerOptions,
+      ),
+    } as UIModelParams;
   };
 
   // Handle model param updates
@@ -570,7 +649,24 @@ export function NodeConfigPanel({
         {/* Messages (only for agent nodes) */}
         {selectedNode.type === "agent" && (
           <div className="space-y-2">
-            <Label>Messages</Label>
+            <div className="flex items-center justify-between">
+              <Label>Messages</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPromptImport(true)}
+              >
+                <FileInput className="mr-1 h-3 w-3" />
+                Import Prompt
+              </Button>
+            </div>
+            {agentData?.promptId && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Link2 className="h-3 w-3" />
+                Imported from prompt v{agentData.promptVersion ?? "?"}
+              </div>
+            )}
             <div className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3">
               <ChatMessages {...messagesContext} />
             </div>
@@ -841,7 +937,36 @@ export function NodeConfigPanel({
             </div>
           </div>
         )}
+
+        {/* Router Configuration (only for router nodes) */}
+        {selectedNode.type === "router" && (
+          <div className="space-y-2">
+            <Label htmlFor="route-field">Route Field</Label>
+            <Input
+              id="route-field"
+              value={(nodeData as RouterNodeData).routeField ?? "output"}
+              onChange={(e) =>
+                onNodeUpdate(selectedNode.id, { routeField: e.target.value })
+              }
+              placeholder="e.g., output"
+            />
+            <div className="text-xs text-muted-foreground">
+              The field from upstream node output used to determine routing.
+              Edge conditions will be evaluated against this field&apos;s value.
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Prompt Import Dialog */}
+      {selectedNode.type === "agent" && (
+        <PromptImportDialog
+          open={showPromptImport}
+          onOpenChange={setShowPromptImport}
+          projectId={projectId}
+          onImport={handlePromptImport}
+        />
+      )}
     </div>
   );
 }

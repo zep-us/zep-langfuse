@@ -355,6 +355,7 @@ function WorkflowEditorContent() {
           edges={edges}
           onNodeUpdate={handleNodeUpdate}
           onClose={() => setSelectedNodeId(null)}
+          projectId={projectId}
         />
       )}
 

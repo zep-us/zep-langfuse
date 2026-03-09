@@ -18,6 +18,7 @@ import "@xyflow/react/dist/style.css";
 import { AgentNode } from "./nodes/AgentNode";
 import { InputNode } from "./nodes/InputNode";
 import { OutputNode } from "./nodes/OutputNode";
+import { RouterNode } from "./nodes/RouterNode";
 import { CustomEdge } from "./edges/CustomEdge";
 import { wouldCreateCycle } from "../utils/graphValidation";
 import type { WorkflowNode, WorkflowEdge } from "../types";
@@ -116,6 +117,7 @@ export function WorkflowCanvas({
       agent: AgentNode,
       input: InputNode,
       output: OutputNode,
+      router: RouterNode,
     }),
     [],
   );

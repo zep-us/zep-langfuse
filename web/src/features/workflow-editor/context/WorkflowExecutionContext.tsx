@@ -23,6 +23,7 @@ interface WorkflowExecutionContextType {
 
   // Global state
   isExecuting: boolean;
+  setIsExecuting: (executing: boolean) => void;
   executionLog: ExecutionLogEntry[];
   addLogEntry: (entry: ExecutionLogEntry) => void;
 
@@ -124,6 +125,7 @@ export function WorkflowExecutionProvider({
         nodeStates,
         setNodeState,
         isExecuting,
+        setIsExecuting,
         executionLog,
         addLogEntry,
         workflowResults,

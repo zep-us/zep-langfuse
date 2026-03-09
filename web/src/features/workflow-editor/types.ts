@@ -18,6 +18,46 @@ export interface RetryConfig {
   retryDelay: number; // milliseconds
 }
 
+// --- Edge condition types ---
+
+export type ConditionOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "not_contains"
+  | "regex_match"
+  | "greater_than"
+  | "less_than"
+  | "is_empty"
+  | "is_not_empty";
+
+export interface EdgeCondition {
+  field: string; // JSON path in upstream output, e.g., "output.category"
+  operator: ConditionOperator;
+  value?: string; // comparison value (not needed for is_empty/is_not_empty)
+}
+
+// Compound condition groups for AND/OR logic
+export interface EdgeConditionGroup {
+  logic: "and" | "or";
+  conditions: EdgeConditionExpr[];
+}
+
+// A condition can be a single condition or a compound group
+export type EdgeConditionExpr = EdgeCondition | EdgeConditionGroup;
+
+export type EdgeType = "default" | "conditional" | "loop";
+
+// Extended edge data
+export interface WorkflowEdgeData extends Record<string, unknown> {
+  edgeType: EdgeType; // default = unconditional, conditional = router output, loop = back-edge
+  condition?: EdgeConditionExpr; // required when edgeType === "conditional"
+  conditionLabel?: string; // human-readable label shown on edge
+  maxIterations?: number; // only for edgeType === "loop", default 10
+}
+
+// --- Node types ---
+
 // Input node specific data
 export interface InputNodeData extends Record<string, unknown> {
   label: string;
@@ -43,6 +83,11 @@ export interface AgentNodeData extends Record<string, unknown> {
   outputMapping?: FieldMapping[];
   // Error handling
   retryConfig?: RetryConfig;
+  // Shared workflow context keys
+  contextReads?: string[];
+  contextWrites?: string[];
+  // Execution mode
+  executionMode?: "llm" | "tool" | "passthrough";
 }
 
 // Output node specific data
@@ -51,17 +96,28 @@ export interface OutputNodeData extends Record<string, unknown> {
   inputMapping?: FieldMapping[];
 }
 
+// Router node data -- pure control-flow, no LLM call
+export interface RouterNodeData extends Record<string, unknown> {
+  label: string;
+  routeField: string; // which field from upstream output to evaluate
+  inputMapping?: FieldMapping[];
+}
+
 // Node data stored in ReactFlow node (union of all node types)
-export type WorkflowNodeData = InputNodeData | AgentNodeData | OutputNodeData;
+export type WorkflowNodeData =
+  | InputNodeData
+  | AgentNodeData
+  | OutputNodeData
+  | RouterNodeData;
 
 // Node types supported in the workflow
-export type WorkflowNodeType = "agent" | "input" | "output";
+export type WorkflowNodeType = "agent" | "input" | "output" | "router";
 
 // ReactFlow node with workflow-specific data
 export type WorkflowNode = Node<WorkflowNodeData, WorkflowNodeType>;
 
-// ReactFlow edge
-export type WorkflowEdge = Edge;
+// ReactFlow edge with workflow-specific data
+export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
 // Complete workflow definition (matches database JSON structure)
 export interface WorkflowDefinition {

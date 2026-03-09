@@ -25,6 +25,44 @@ export const ModelParamsSchema = z.object({
   max_completion_tokens: z.number().optional(),
 });
 
+// --- Edge condition schemas ---
+
+// Single condition
+export const EdgeConditionSchema = z.object({
+  field: z.string(),
+  operator: z.enum([
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "regex_match",
+    "greater_than",
+    "less_than",
+    "is_empty",
+    "is_not_empty",
+  ]),
+  value: z.string().optional(),
+});
+
+// Compound condition group (AND/OR logic) - uses z.lazy for recursion
+export const EdgeConditionGroupSchema: z.ZodType<{
+  logic: "and" | "or";
+  conditions: unknown[];
+}> = z.object({
+  logic: z.enum(["and", "or"]),
+  conditions: z
+    .lazy(() =>
+      z.array(z.union([EdgeConditionSchema, EdgeConditionGroupSchema])),
+    )
+    .pipe(z.array(z.any()).min(1)),
+});
+
+// Combined: single condition or compound group
+export const EdgeConditionExprSchema = z.union([
+  EdgeConditionSchema,
+  EdgeConditionGroupSchema,
+]);
+
 // Node data configuration
 export const WorkflowNodeDataSchema = z.object({
   label: z.string().min(1),
@@ -43,15 +81,47 @@ export const WorkflowNodeDataSchema = z.object({
   outputMapping: z.array(FieldMappingSchema).optional(),
   // Error handling
   retryConfig: RetryConfigSchema.optional(),
+  // Router-specific fields (optional at schema level, cross-validated in WorkflowNodeDefSchema)
+  routeField: z.string().optional(),
+  // Shared workflow context keys
+  contextReads: z.array(z.string()).optional(),
+  contextWrites: z.array(z.string()).optional(),
+  // Execution mode
+  executionMode: z.enum(["llm", "tool", "passthrough"]).optional(),
 });
 
 // Node definition (matches ReactFlow Node structure)
-export const WorkflowNodeDefSchema = z.object({
-  id: z.string(),
-  type: z.enum(["agent", "input", "output"]),
-  position: z.object({ x: z.number(), y: z.number() }),
-  data: WorkflowNodeDataSchema,
-});
+export const WorkflowNodeDefSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum(["agent", "input", "output", "router"]),
+    position: z.object({ x: z.number(), y: z.number() }),
+    data: WorkflowNodeDataSchema,
+  })
+  .refine(
+    (node) => {
+      const d = node.data as Record<string, unknown>;
+      if (node.type === "router") {
+        if (!d.routeField || typeof d.routeField !== "string") return false;
+        if (
+          d.messages ||
+          d.modelParams ||
+          d.tools ||
+          d.structuredOutputSchema ||
+          d.retryConfig
+        )
+          return false;
+      }
+      if (node.type === "agent") {
+        if (d.routeField) return false;
+      }
+      if (node.type === "input" || node.type === "output") {
+        if (d.routeField || d.messages || d.modelParams) return false;
+      }
+      return true;
+    },
+    { message: "Node data fields are inconsistent with node type" },
+  );
 
 // Edge definition (matches ReactFlow Edge structure)
 export const WorkflowEdgeDefSchema = z.object({
@@ -60,6 +130,15 @@ export const WorkflowEdgeDefSchema = z.object({
   target: z.string(),
   sourceHandle: z.string().optional(),
   targetHandle: z.string().optional(),
+  // New fields -- all optional for backward compat with edges that have no `data`
+  data: z
+    .object({
+      edgeType: z.enum(["default", "conditional", "loop"]).default("default"),
+      condition: EdgeConditionExprSchema.optional(),
+      conditionLabel: z.string().optional(),
+      maxIterations: z.number().int().min(1).max(100).optional(),
+    })
+    .optional(),
 });
 
 // Complete workflow definition (graph structure)
