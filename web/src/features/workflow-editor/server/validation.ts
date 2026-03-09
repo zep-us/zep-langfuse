@@ -88,6 +88,9 @@ export const WorkflowNodeDataSchema = z.object({
   contextWrites: z.array(z.string()).optional(),
   // Execution mode
   executionMode: z.enum(["llm", "tool", "passthrough"]).optional(),
+  // Tool configuration (for executionMode === "tool")
+  toolType: z.string().optional(),
+  toolConfig: z.record(z.unknown()).optional(),
 });
 
 // Node definition (matches ReactFlow Node structure)

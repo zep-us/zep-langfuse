@@ -88,6 +88,9 @@ export interface AgentNodeData extends Record<string, unknown> {
   contextWrites?: string[];
   // Execution mode
   executionMode?: "llm" | "tool" | "passthrough";
+  // Tool configuration (only for executionMode === "tool")
+  toolType?: string;
+  toolConfig?: Record<string, unknown>;
 }
 
 // Output node specific data

@@ -41,6 +41,7 @@ export function useWorkflowExecution(projectId: string) {
     workflowId,
   } = useWorkflowExecutionContext();
   const executeNodeMutation = api.workflows.execute.useMutation();
+  const executeToolMutation = api.workflows.executeTool.useMutation();
   const saveExecutionMutation =
     api.workflows.saveExecutionResults.useMutation();
 
@@ -164,9 +165,26 @@ export function useWorkflowExecution(projectId: string) {
         return JSON.stringify(variables);
       }
 
-      // Tool mode: placeholder -- pass through for now
+      // Tool mode: execute via server-side tool registry
       if (executionMode === "tool") {
-        return JSON.stringify(variables);
+        const toolType = agentData.toolType;
+        const toolConfig = agentData.toolConfig ?? {};
+
+        if (!toolType) {
+          return JSON.stringify({
+            error: "Tool node has no toolType configured",
+            ...variables,
+          });
+        }
+
+        const toolResult = await executeToolMutation.mutateAsync({
+          projectId,
+          toolType,
+          toolConfig,
+          inputData: variables,
+        });
+
+        return JSON.stringify(toolResult);
       }
 
       // LLM mode (default)
@@ -222,7 +240,13 @@ export function useWorkflowExecution(projectId: string) {
 
       throw new Error("Unreachable");
     },
-    [projectId, resolveVariables, addLogEntry, executeNodeMutation],
+    [
+      projectId,
+      resolveVariables,
+      addLogEntry,
+      executeNodeMutation,
+      executeToolMutation,
+    ],
   );
 
   /**

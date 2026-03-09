@@ -630,48 +630,124 @@ export function NodeConfigPanel({
           </div>
         )}
 
-        {/* Model Configuration (only for agent nodes) */}
+        {/* Execution Mode (only for agent nodes) */}
         {selectedNode.type === "agent" && (
           <div className="space-y-2">
-            <Label>Model</Label>
-            <ModelParameters
-              modelParams={getCompleteModelParams()}
-              availableProviders={availableProviders}
-              availableModels={availableModels}
-              providerModelCombinations={providerModelCombinations}
-              updateModelParamValue={updateModelParamValue}
-              layout="vertical"
-              isEmbedded
-            />
+            <Label>Execution Mode</Label>
+            <Select
+              value={(nodeData as AgentNodeData).executionMode ?? "llm"}
+              onValueChange={(value: "llm" | "tool" | "passthrough") =>
+                onNodeUpdate(selectedNode.id, { executionMode: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="llm">LLM (AI Model)</SelectItem>
+                <SelectItem value="tool">Tool (Server-side)</SelectItem>
+                <SelectItem value="passthrough">Passthrough</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
 
-        {/* Messages (only for agent nodes) */}
-        {selectedNode.type === "agent" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Messages</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setShowPromptImport(true)}
-              >
-                <FileInput className="mr-1 h-3 w-3" />
-                Import Prompt
-              </Button>
-            </div>
-            {agentData?.promptId && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Link2 className="h-3 w-3" />
-                Imported from prompt v{agentData.promptVersion ?? "?"}
+        {/* Tool Configuration (only for tool mode agent nodes) */}
+        {selectedNode.type === "agent" &&
+          (nodeData as AgentNodeData).executionMode === "tool" && (
+            <div className="space-y-3">
+              <Label>Tool Type</Label>
+              <Input
+                value={(nodeData as AgentNodeData).toolType ?? ""}
+                onChange={(e) =>
+                  onNodeUpdate(selectedNode.id, {
+                    toolType: e.target.value,
+                  })
+                }
+                placeholder="e.g., neo4j-vector-search"
+              />
+              <div className="text-xs text-muted-foreground">
+                Available: neo4j-vector-search
               </div>
-            )}
-            <div className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3">
-              <ChatMessages {...messagesContext} />
+
+              <Label>Tool Configuration (JSON)</Label>
+              <Textarea
+                className="font-mono text-xs"
+                rows={6}
+                placeholder={`{
+  "indexName": "achievement_standard_index_openai",
+  "topK": 5,
+  "embeddingModel": "text-embedding-3-small",
+  "queryField": "current_message"
+}`}
+                value={(() => {
+                  const config = (nodeData as AgentNodeData).toolConfig;
+                  if (!config) return "";
+                  return JSON.stringify(config, null, 2);
+                })()}
+                onChange={(e) => {
+                  const trimmed = e.target.value.trim();
+                  if (!trimmed) {
+                    onNodeUpdate(selectedNode.id, { toolConfig: {} });
+                    return;
+                  }
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    onNodeUpdate(selectedNode.id, {
+                      toolConfig: parsed,
+                    });
+                  } catch {
+                    // Allow typing invalid JSON temporarily
+                  }
+                }}
+              />
             </div>
-          </div>
-        )}
+          )}
+
+        {/* Model Configuration (only for LLM mode agent nodes) */}
+        {selectedNode.type === "agent" &&
+          (nodeData as AgentNodeData).executionMode !== "tool" && (
+            <div className="space-y-2">
+              <Label>Model</Label>
+              <ModelParameters
+                modelParams={getCompleteModelParams()}
+                availableProviders={availableProviders}
+                availableModels={availableModels}
+                providerModelCombinations={providerModelCombinations}
+                updateModelParamValue={updateModelParamValue}
+                layout="vertical"
+                isEmbedded
+              />
+            </div>
+          )}
+
+        {/* Messages (only for LLM mode agent nodes) */}
+        {selectedNode.type === "agent" &&
+          (nodeData as AgentNodeData).executionMode !== "tool" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Messages</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPromptImport(true)}
+                >
+                  <FileInput className="mr-1 h-3 w-3" />
+                  Import Prompt
+                </Button>
+              </div>
+              {agentData?.promptId && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Link2 className="h-3 w-3" />
+                  Imported from prompt v{agentData.promptVersion ?? "?"}
+                </div>
+              )}
+              <div className="max-h-96 overflow-auto rounded-md border bg-muted/30 p-3">
+                <ChatMessages {...messagesContext} />
+              </div>
+            </div>
+          )}
 
         {/* Structured Output Schema (only for agent nodes) */}
         {selectedNode.type === "agent" && (

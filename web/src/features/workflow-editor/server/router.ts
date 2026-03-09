@@ -393,6 +393,85 @@ export const workflowRouter = createTRPCRouter({
       }
     }),
 
+  executeTool: protectedProjectProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        toolType: z.string(),
+        toolConfig: z.record(z.unknown()),
+        inputData: z.record(z.unknown()),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        throwIfNoProjectAccess({
+          session: ctx.session,
+          projectId: input.projectId,
+          scope: "workflows:CUD",
+        });
+
+        // Bootstrap tools (registers all tool definitions)
+        await import("./tools/bootstrap");
+        const { getTool } = await import("./tools/registry");
+
+        const tool = getTool(input.toolType);
+        if (!tool) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `Tool '${input.toolType}' not found. Available tools can be listed via the tool registry.`,
+          });
+        }
+
+        const result = await tool.execute(input.toolConfig, {
+          projectId: input.projectId,
+          inputData: input.inputData,
+        });
+
+        if (!result.success) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: result.error || "Tool execution failed",
+          });
+        }
+
+        return result.output;
+      } catch (error) {
+        logger.error("Failed to execute workflow tool", {
+          toolType: input.toolType,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            error instanceof Error ? error.message : "Tool execution failed",
+        });
+      }
+    }),
+
+  listTools: protectedProjectProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      throwIfNoProjectAccess({
+        session: ctx.session,
+        projectId: input.projectId,
+        scope: "workflows:read",
+      });
+
+      // Bootstrap tools
+      await import("./tools/bootstrap");
+      const { getAllTools } = await import("./tools/registry");
+
+      return getAllTools().map((tool) => ({
+        type: tool.type,
+        label: tool.label,
+        description: tool.description,
+        configFields: tool.configFields,
+      }));
+    }),
+
   execute: protectedProjectProcedure
     .input(
       z.object({
