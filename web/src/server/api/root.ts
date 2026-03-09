@@ -24,6 +24,7 @@ import { blobStorageIntegrationRouter } from "@/src/features/blobstorage-integra
 import { llmApiKeyRouter } from "@/src/features/llm-api-key/server/router";
 import { llmSchemaRouter } from "@/src/features/llm-schemas/server/router";
 import { llmToolRouter } from "@/src/features/llm-tools/server/router";
+import { workflowRouter } from "@/src/features/workflow-editor/server/router";
 import { organizationsRouter } from "@/src/features/organizations/server/organizationRouter";
 import { organizationApiKeysRouter } from "@/src/features/public-api/server/organizationApiKeyRouter";
 import { scoreConfigsRouter } from "@/src/server/api/routers/scoreConfigs";
@@ -94,6 +95,7 @@ export const appRouter = createTRPCRouter({
   llmApiKey: llmApiKeyRouter,
   llmSchemas: llmSchemaRouter,
   llmTools: llmToolRouter,
+  workflows: workflowRouter,
   public: publicRouter,
   credentials: credentialsRouter,
   utilities: utilsRouter,
