@@ -11,6 +11,7 @@
  * - updateWorkflow: Update workflow metadata (destructive)
  * - deleteWorkflow: Delete a workflow (destructive)
  * - updateNodePrompt: Update the prompt assigned to a workflow node (destructive)
+ * - importPromptToNode: Import a registered Langfuse prompt into a workflow node (destructive)
  * - addNode: Add a node to a workflow (destructive)
  * - removeNode: Remove a node from a workflow (destructive)
  * - connectNodes: Connect two nodes in a workflow (destructive)
@@ -36,6 +37,10 @@ import {
   updateNodePromptTool,
   handleUpdateNodePrompt,
 } from "./tools/updateNodePrompt";
+import {
+  importPromptToNodeTool,
+  handleImportPromptToNode,
+} from "./tools/importPromptToNode";
 import { addNodeTool, handleAddNode } from "./tools/addNode";
 import { removeNodeTool, handleRemoveNode } from "./tools/removeNode";
 import { connectNodesTool, handleConnectNodes } from "./tools/connectNodes";
@@ -79,6 +84,10 @@ export const workflowsFeature: McpFeatureModule = {
     {
       definition: updateNodePromptTool,
       handler: handleUpdateNodePrompt,
+    },
+    {
+      definition: importPromptToNodeTool,
+      handler: handleImportPromptToNode,
     },
     {
       definition: addNodeTool,

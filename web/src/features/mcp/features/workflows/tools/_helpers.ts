@@ -21,6 +21,12 @@ export interface WorkflowEdgeShape {
   target: string;
   sourceHandle?: string;
   targetHandle?: string;
+  data?: {
+    edgeType?: "default" | "conditional" | "loop";
+    condition?: Record<string, unknown>; // EdgeConditionExpr
+    conditionLabel?: string;
+    maxIterations?: number;
+  };
 }
 
 export interface WorkflowDefinitionShape {

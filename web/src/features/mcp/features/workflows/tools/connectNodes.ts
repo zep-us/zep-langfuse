@@ -22,6 +22,39 @@ import {
 /**
  * Base schema for connectNodes tool
  */
+const EdgeConditionSchema = z.object({
+  field: z
+    .string()
+    .describe("JSON path in upstream output, e.g. 'output.category'"),
+  operator: z.enum([
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "regex_match",
+    "greater_than",
+    "less_than",
+    "is_empty",
+    "is_not_empty",
+  ]),
+  value: z.string().optional().describe("Comparison value"),
+});
+
+const EdgeConditionGroupSchema: z.ZodType<{
+  logic: "and" | "or";
+  conditions: unknown[];
+}> = z.object({
+  logic: z.enum(["and", "or"]),
+  conditions: z.lazy(() =>
+    z.array(z.union([EdgeConditionSchema, EdgeConditionGroupSchema])),
+  ),
+});
+
+const EdgeConditionExprSchema = z.union([
+  EdgeConditionSchema,
+  EdgeConditionGroupSchema,
+]);
+
 const ConnectNodesBaseSchema = z.object({
   workflowName: ParamWorkflowName,
   sourceNodeId: z
@@ -40,6 +73,29 @@ const ConnectNodesBaseSchema = z.object({
     .string()
     .optional()
     .describe("Optional handle ID on the target node"),
+  edgeType: z
+    .enum(["default", "conditional", "loop"])
+    .optional()
+    .default("default")
+    .describe(
+      "Edge type: 'default' (unconditional), 'conditional' (router branch), 'loop' (back-edge with iteration limit)",
+    ),
+  condition: EdgeConditionExprSchema.optional().describe(
+    "Condition for conditional edges. Single: {field, operator, value}. Compound: {logic: 'and'|'or', conditions: [...]}",
+  ),
+  conditionLabel: z
+    .string()
+    .optional()
+    .describe(
+      "Human-readable label for the condition, e.g. 'category = sports'",
+    ),
+  maxIterations: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("Max iterations for loop edges (default 10, max 100)"),
 });
 
 /**
@@ -50,13 +106,20 @@ export const [connectNodesTool, handleConnectNodes] = defineTool({
   description: [
     "Add a directed edge between two existing nodes in a workflow.",
     "",
+    "Edge types:",
+    "- 'default': Unconditional edge (standard data flow)",
+    "- 'conditional': Conditional edge from a router node. Requires 'condition' parameter.",
+    "- 'loop': Back-edge for creating loops. Source must be a router node. Optional 'maxIterations' (default 10).",
+    "",
     "Important:",
     "- Both source and target nodes must already exist in the workflow",
     "- Workflows are immutable - this creates a new version",
     "- Edge ID is auto-generated",
     "- Use sourceHandle/targetHandle if the nodes expose multiple connection points",
+    "- Conditional edges require a condition (single or compound AND/OR)",
+    "- Loop edges source must be a router node",
     "",
-    "Accepts: workflowName, sourceNodeId, targetNodeId, optional sourceHandle, optional targetHandle",
+    "Accepts: workflowName, sourceNodeId, targetNodeId, edgeType, condition, conditionLabel, maxIterations",
   ].join("\n"),
   baseSchema: ConnectNodesBaseSchema,
   inputSchema: ConnectNodesBaseSchema,
@@ -70,6 +133,10 @@ export const [connectNodesTool, handleConnectNodes] = defineTool({
           targetNodeId,
           sourceHandle,
           targetHandle,
+          edgeType,
+          condition,
+          conditionLabel,
+          maxIterations,
         } = input;
 
         // Set span attributes for observability
@@ -110,14 +177,39 @@ export const [connectNodesTool, handleConnectNodes] = defineTool({
           );
         }
 
+        // Validate edge type constraints
+        if (edgeType === "conditional" && !condition) {
+          throw new UserInputError(
+            "Conditional edges require a 'condition' parameter",
+          );
+        }
+        const sourceNode = definition.nodes.find((n) => n.id === sourceNodeId);
+        // Validate no adjacent routers
+        const targetNode = definition.nodes.find((n) => n.id === targetNodeId);
+        if (
+          sourceNode?.type === "router" &&
+          targetNode?.type === "router" &&
+          edgeType !== "loop"
+        ) {
+          throw new UserInputError(
+            "Direct router-to-router connections are not allowed. Place an agent node in between.",
+          );
+        }
+
         // Build new edge with auto-generated ID
         const edgeId = `edge-${sourceNodeId}-${targetNodeId}-${Date.now()}`;
+        const edgeData: Record<string, unknown> = { edgeType };
+        if (condition) edgeData.condition = condition;
+        if (conditionLabel) edgeData.conditionLabel = conditionLabel;
+        if (maxIterations !== undefined) edgeData.maxIterations = maxIterations;
+
         const newEdge: WorkflowEdgeShape = {
           id: edgeId,
           source: sourceNodeId,
           target: targetNodeId,
           ...(sourceHandle ? { sourceHandle } : {}),
           ...(targetHandle ? { targetHandle } : {}),
+          ...(edgeType !== "default" ? { data: edgeData } : {}),
         };
 
         const updatedDefinition: WorkflowDefinitionShape = {

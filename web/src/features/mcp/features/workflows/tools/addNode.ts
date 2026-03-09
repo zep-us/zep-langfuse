@@ -24,7 +24,7 @@ import {
 const AddNodeBaseSchema = z.object({
   workflowName: ParamWorkflowName,
   nodeType: z
-    .enum(["agent", "input", "output"])
+    .enum(["agent", "input", "output", "router"])
     .describe("The type of node to add"),
   nodeId: z
     .string()
@@ -59,9 +59,31 @@ const AddNodeBaseSchema = z.object({
         })
         .optional()
         .describe("Model parameters (agent nodes only)"),
+      routeField: z
+        .string()
+        .optional()
+        .describe(
+          "JSON path to evaluate in upstream output (router nodes only), e.g. 'output.category'",
+        ),
+      executionMode: z
+        .enum(["llm", "tool", "passthrough"])
+        .optional()
+        .describe(
+          "Execution mode for agent nodes: 'llm' (default), 'tool', or 'passthrough'",
+        ),
+      contextReads: z
+        .array(z.string())
+        .optional()
+        .describe("Keys to read from shared workflow context"),
+      contextWrites: z
+        .array(z.string())
+        .optional()
+        .describe("Keys to write to shared workflow context"),
     })
     .optional()
-    .describe("Optional configuration for the node (used for agent nodes)"),
+    .describe(
+      "Optional configuration for the node (agent: messages, modelParams, executionMode; router: routeField)",
+    ),
 });
 
 /**
@@ -73,9 +95,10 @@ export const [addNodeTool, handleAddNode] = defineTool({
     "Add a new node to a workflow.",
     "",
     "Node types:",
-    "- 'agent': LLM agent node - accepts messages and modelParams in config",
+    "- 'agent': LLM agent node - accepts messages, modelParams, executionMode, contextReads, contextWrites in config",
     "- 'input': Workflow input node - receives external inputs",
     "- 'output': Workflow output node - produces final results",
+    "- 'router': Conditional routing node - accepts routeField in config. Pure control-flow, no LLM call.",
     "",
     "Important:",
     "- nodeId must be unique within the workflow",
@@ -125,6 +148,19 @@ export const [addNodeTool, handleAddNode] = defineTool({
         if (nodeType === "agent" && config) {
           if (config.messages) nodeData.messages = config.messages;
           if (config.modelParams) nodeData.modelParams = config.modelParams;
+          if (config.executionMode)
+            nodeData.executionMode = config.executionMode;
+          if (config.contextReads) nodeData.contextReads = config.contextReads;
+          if (config.contextWrites)
+            nodeData.contextWrites = config.contextWrites;
+        }
+        if (nodeType === "router" && config) {
+          if (!config.routeField) {
+            throw new UserInputError(
+              "Router nodes require 'routeField' in config",
+            );
+          }
+          nodeData.routeField = config.routeField;
         }
 
         const newNode = {
